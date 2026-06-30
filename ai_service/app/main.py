@@ -9,7 +9,7 @@ import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 
 from config.settings import settings
-from ai_service.app.api import events
+from ai_service.app.api import events, anomalies
 
 # Setup logging
 logging.basicConfig(
@@ -49,6 +49,7 @@ app.add_middleware(
 
 # Include routers
 app.include_router(events.router)
+app.include_router(anomalies.router)
 
 @app.get("/health")
 async def health_check():
@@ -64,10 +65,9 @@ async def root():
         "message": "Threat Hunting AI Service",
         "docs": "/docs",
         "redoc": "/redoc",
-        "endpoints": {
-            "/api/events/sample": "Get sample mock events",
-            "/api/events/attack-scenario": "Get attack scenario",
-            "/api/events/enrich": "Enrich event with threat intel",
+        "modules": {
+            "events": "/api/events",
+            "anomalies": "/api/anomalies",
         }
     }
 
