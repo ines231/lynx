@@ -5,40 +5,32 @@ import logging
 import sys
 import os
 
-# Add parent directory to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 
 from config.settings import settings
-from ai_service.app.api import events, anomalies
+from ai_service.app.api import events, anomalies, investigations
 
-# Setup logging
 logging.basicConfig(
     level=settings.log_level,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
 
-# Lifespan context manager
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup
     logger.info("🚀 Threat Hunting AI Service Starting...")
     logger.info(f"Environment: {settings.env}")
-    logger.info(f"Debug: {settings.debug}")
     logger.info(f"API running on http://{settings.api_host}:{settings.api_port}")
     yield
-    # Shutdown
     logger.info("🛑 Threat Hunting AI Service Shutting Down...")
 
-# Create FastAPI app
 app = FastAPI(
     title="Threat Hunting AI Service",
     description="AI-powered proactive threat hunting engine",
-    version="0.1.0",
+    version="0.2.0",
     lifespan=lifespan
 )
 
-# Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -47,36 +39,26 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Include routers
 app.include_router(events.router)
 app.include_router(anomalies.router)
+app.include_router(investigations.router)
 
 @app.get("/health")
 async def health_check():
-    return {
-        "status": "healthy",
-        "service": "threat-hunting-ai",
-        "version": "0.1.0"
-    }
+    return {"status": "healthy", "service": "threat-hunting-ai", "version": "0.2.0"}
 
 @app.get("/")
 async def root():
     return {
-        "message": "Threat Hunting AI Service",
+        "message": "Threat Hunting AI Service v0.2.0",
         "docs": "/docs",
-        "redoc": "/redoc",
         "modules": {
             "events": "/api/events",
             "anomalies": "/api/anomalies",
+            "investigations": "/api/investigations"
         }
     }
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(
-        "ai_service.app.main:app",
-        host=settings.api_host,
-        port=settings.api_port,
-        reload=True,
-        log_level=settings.log_level.lower()
-    )
+    uvicorn.run("ai_service.app.main:app", host=settings.api_host, port=settings.api_port, reload=True)

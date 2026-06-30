@@ -23,43 +23,47 @@ class EnrichmentService:
         """
         threat_intel = {}
         
-        # Check source IP
-        if event.source_ip:
-            try:
-                source_result = await self.intelowl.check_ip(event.source_ip)
-                threat_intel["source_ip"] = source_result
-                logger.debug(f"Enriched source IP: {event.source_ip}")
-            except Exception as e:
-                logger.error(f"Failed to check source IP {event.source_ip}: {e}")
-        
-        # Check destination IP
-        if event.destination_ip:
-            try:
-                dest_result = await self.intelowl.check_ip(event.destination_ip)
-                threat_intel["destination_ip"] = dest_result
-                logger.debug(f"Enriched destination IP: {event.destination_ip}")
-            except Exception as e:
-                logger.error(f"Failed to check destination IP {event.destination_ip}: {e}")
-        
-        # Check file hash
-        if event.file_hash:
-            try:
-                hash_result = await self.intelowl.check_hash(event.file_hash)
-                threat_intel["file_hash"] = hash_result
-                logger.debug(f"Enriched file hash: {event.file_hash[:16]}...")
-            except Exception as e:
-                logger.error(f"Failed to check file hash: {e}")
-        
-        # Check URLs in command line or metadata
-        if event.command_line and ("http://" in event.command_line or "https://" in event.command_line):
-            import re
-            urls = re.findall(r'https?://[^\s]+', event.command_line)
-            for url in urls[:1]:  # Check first URL only
+        try:
+            # Check source IP
+            if event.source_ip:
                 try:
-                    url_result = await self.intelowl.check_url(url)
-                    threat_intel["url"] = url_result
+                    source_result = await self.intelowl.check_ip(event.source_ip)
+                    threat_intel["source_ip"] = source_result
+                    logger.debug(f"Enriched source IP: {event.source_ip}")
                 except Exception as e:
-                    logger.error(f"Failed to check URL: {e}")
+                    logger.error(f"Failed to check source IP {event.source_ip}: {e}")
+            
+            # Check destination IP
+            if event.destination_ip:
+                try:
+                    dest_result = await self.intelowl.check_ip(event.destination_ip)
+                    threat_intel["destination_ip"] = dest_result
+                    logger.debug(f"Enriched destination IP: {event.destination_ip}")
+                except Exception as e:
+                    logger.error(f"Failed to check destination IP {event.destination_ip}: {e}")
+            
+            # Check file hash
+            if event.file_hash:
+                try:
+                    hash_result = await self.intelowl.check_hash(event.file_hash)
+                    threat_intel["file_hash"] = hash_result
+                    logger.debug(f"Enriched file hash: {event.file_hash[:16]}...")
+                except Exception as e:
+                    logger.error(f"Failed to check file hash: {e}")
+            
+            # Check URLs in command line or metadata
+            if event.command_line and ("http://" in event.command_line or "https://" in event.command_line):
+                import re
+                urls = re.findall(r'https?://[^\s]+', event.command_line)
+                for url in urls[:1]:  # Check first URL only
+                    try:
+                        url_result = await self.intelowl.check_url(url)
+                        threat_intel["url"] = url_result
+                    except Exception as e:
+                        logger.error(f"Failed to check URL: {e}")
+        
+        except Exception as e:
+            logger.error(f"Error in enrich_event: {e}")
         
         enriched = EnrichedEvent(
             event=event,

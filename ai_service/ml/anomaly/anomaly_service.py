@@ -8,6 +8,22 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+def convert_numpy_types(obj):
+    """Recursively convert numpy types to Python native types"""
+    if isinstance(obj, np.bool_):
+        return bool(obj)
+    elif isinstance(obj, np.integer):
+        return int(obj)
+    elif isinstance(obj, np.floating):
+        return float(obj)
+    elif isinstance(obj, np.ndarray):
+        return obj.tolist()
+    elif isinstance(obj, dict):
+        return {k: convert_numpy_types(v) for k, v in obj.items()}
+    elif isinstance(obj, (list, tuple)):
+        return [convert_numpy_types(item) for item in obj]
+    return obj
+
 class AnomalyService:
     """Service for anomaly detection and analysis"""
     
@@ -20,11 +36,9 @@ class AnomalyService:
         """Train the anomaly detector on historical events"""
         logger.info(f"Training detector on {len(events)} events")
         
-        # Train Isolation Forest
         result = self.detector.train(events)
         
         if result["status"] == "success":
-            # Save model
             self.detector.save_model()
             logger.info("Detector trained and saved")
         
@@ -44,14 +58,10 @@ class AnomalyService:
     def detect_anomaly(self, event: Dict) -> Dict:
         """
         Detect if event is anomalous
-        Combines:
-        1. Isolation Forest outlier detection
-        2. Baseline deviation analysis
+        Combines Isolation Forest + Baseline deviation
         """
-        # Get Isolation Forest detection
         is_outlier, outlier_score, outlier_details = self.detector.detect_anomaly(event)
         
-        # Get baseline deviation (if user baseline exists)
         baseline_deviation = 0.0
         baseline_details = {}
         
@@ -67,16 +77,14 @@ class AnomalyService:
                 user, feature_vector
             )
         
-        # Combined anomaly score
         combined_score = (outlier_score * 0.6 + min(baseline_deviation / 5.0, 1.0) * 0.4)
-        
         is_anomaly = combined_score > 0.5 or is_outlier
         
-        return {
-            "is_anomaly": is_anomaly,
+        result = {
+            "is_anomaly": bool(is_anomaly),
             "anomaly_score": float(combined_score),
             "outlier_detection": {
-                "is_outlier": is_outlier,
+                "is_outlier": bool(is_outlier),
                 "score": float(outlier_score),
                 **outlier_details
             },
@@ -92,6 +100,9 @@ class AnomalyService:
                 "severity": event.get("severity")
             }
         }
+        
+        # Convert all numpy types to Python types
+        return convert_numpy_types(result)
     
     def detect_batch_anomalies(self, events: List[Dict]) -> List[Dict]:
         """Detect anomalies in batch"""
@@ -104,7 +115,8 @@ class AnomalyService:
         anomaly_count = sum(1 for r in results if r["is_anomaly"])
         logger.info(f"Analyzed {len(events)} events, found {anomaly_count} anomalies")
         
-        return results
+        # Ensure all results are JSON-serializable
+        return convert_numpy_types(results)
     
     def get_detector_status(self) -> Dict:
         """Get detector status and info"""
