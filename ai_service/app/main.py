@@ -8,7 +8,7 @@ import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 
 from config.settings import settings
-from ai_service.app.api import events, anomalies, investigations
+from ai_service.app.api import events, anomalies, investigations, risk
 
 logging.basicConfig(
     level=settings.log_level,
@@ -26,8 +26,8 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="Threat Hunting AI Service",
-    description="AI-powered proactive threat hunting engine",
-    version="0.2.0",
+    description="AI-powered proactive threat hunting engine with Probabilistic FAIR Risk Engine",
+    version="0.3.0",
     lifespan=lifespan
 )
 
@@ -42,20 +42,22 @@ app.add_middleware(
 app.include_router(events.router)
 app.include_router(anomalies.router)
 app.include_router(investigations.router)
+app.include_router(risk.router)
 
 @app.get("/health")
 async def health_check():
-    return {"status": "healthy", "service": "threat-hunting-ai", "version": "0.2.0"}
+    return {"status": "healthy", "service": "threat-hunting-ai", "version": "0.3.0"}
 
 @app.get("/")
 async def root():
     return {
-        "message": "Threat Hunting AI Service v0.2.0",
+        "message": "Threat Hunting AI Service v0.3.0 - Probabilistic FAIR Risk Engine",
         "docs": "/docs",
         "modules": {
             "events": "/api/events",
             "anomalies": "/api/anomalies",
-            "investigations": "/api/investigations"
+            "investigations": "/api/investigations",
+            "risk": "/api/risk"
         }
     }
 
