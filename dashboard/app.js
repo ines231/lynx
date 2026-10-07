@@ -142,7 +142,7 @@ async function load() {
 
     $("kpiEvents").textContent = risk.summary?.total_events ?? rows.length;
     $("kpiAnomalies").textContent = anomaly.steps?.detection?.anomalies_detected ?? anomaly.detection?.anomalies_detected ?? "—";
-    $("anomalyRate").textContent = anomaly.steps?.detection?.detection_rate || anomaly.detection?.detection_rate || "Détection ML";
+    const detectionRate = anomaly.steps?.detection?.detection_rate || anomaly.detection?.detection_rate;\n    $("anomalyRate").textContent = detectionRate ? `${detectionRate} classés anomalies` : "Détection ML";
     $("kpiAttacks").textContent = risk.summary?.attacks_found ?? 0;
     $("kpiReports").textContent = (risk.summary?.reports_generated ?? 0) + " rapport(s) généré(s)";
     $("kpiALE").textContent = money(highest?.annual_loss_expectancy);
