@@ -474,6 +474,15 @@ async def analyze_with_risk_engine(
         # STEP 3 - RISK CALCULATION
         # =========================================================
 
+        # Chi-square is a distribution test, so it must be computed
+        # on the complete attack window rather than on one event.
+        chi2_prob, chi2_details = (
+            chi_square_tests.test_event_type_distribution(
+                enriched_attack,
+                baseline
+            )
+        )
+
         event_risks = []
 
         for event in enriched_attack:
@@ -485,13 +494,9 @@ async def analyze_with_risk_engine(
                 )
             )
 
-            # Chi-Square analysis
-            chi2_prob, chi2_details = (
-                chi_square_tests.test_process_distribution(
-                    [event],
-                    baseline
-                )
-            )
+            # Chi-square describes the statistical deviation of the
+            # complete attack distribution. It is therefore shared as
+            # scenario context across the event-level risk feed.
 
             # FAIR
             risk_metrics = (
