@@ -7,62 +7,118 @@
   <link rel="stylesheet" href="/dashboard/style.css">
 </head>
 <body>
-  <div class="shell">
-    <aside class="sidebar">
-      <div class="brand"><span class="brand-mark">L</span><div><strong>LYNX</strong><small>Threat Hunting</small></div></div>
-      <nav>
-        <a class="active" href="#overview">Overview</a>
-        <a href="#risk">Risk Analysis</a>
-        <a href="#killchain">Kill Chain</a>
-        <a href="#investigation">Investigation</a>
-      </nav>
-      <div class="sidebar-foot"><span class="dot"></span> AI Service online</div>
-    </aside>
-    <main class="content">
-      <header class="topbar">
-        <div><div class="eyebrow">SECURITY OPERATIONS CENTER</div><h1>Probabilistic Threat Hunting</h1><p>Détection comportementale, quantification du risque et aide à l’investigation.</p></div>
+<div class="shell">
+  <aside class="sidebar">
+    <div class="brand">
+      <span class="brand-mark">L</span>
+      <div><strong>LYNX</strong><small>Threat Hunting</small></div>
+    </div>
+    <nav>
+      <a class="active" href="#overview">Vue générale</a>
+      <a href="#risk">Analyse du risque</a>
+      <a href="#killchain">Kill chain</a>
+      <a href="#feed">Flux d'événements</a>
+      <a href="#investigation">Investigation</a>
+    </nav>
+    <div class="sidebar-foot"><span class="dot"></span> AI Service opérationnel</div>
+  </aside>
+
+  <main class="content">
+    <header class="topbar">
+      <div>
+        <div class="eyebrow">SECURITY OPERATIONS CENTER</div>
+        <h1>Probabilistic Threat Hunting</h1>
+        <p>Détection comportementale, quantification FAIR du risque et aide à la décision.</p>
+      </div>
+      <div class="top-actions">
+        <span id="serviceBadge" class="status-chip">Connexion…</span>
         <button id="refreshBtn" class="primary">↻ Actualiser</button>
-      </header>
+      </div>
+    </header>
 
-      <section id="overview" class="kpis">
-        <article class="card kpi"><span>Événements analysés</span><strong id="kpiEvents">—</strong><small>Scénario courant</small></article>
-        <article class="card kpi"><span>Anomalies détectées</span><strong id="kpiAnomalies">—</strong><small id="anomalyRate">—</small></article>
-        <article class="card kpi"><span>Attaques corrélées</span><strong id="kpiAttacks">—</strong><small>Kill chain</small></article>
-        <article class="card kpi risk-kpi"><span>Risque annuel estimé</span><strong id="kpiALE">—</strong><small>Annual Loss Expectancy</small></article>
-      </section>
+    <section id="overview" class="kpis">
+      <article class="card kpi"><span>Événements d'attaque</span><strong id="kpiEvents">—</strong><small>Scénario analysé</small></article>
+      <article class="card kpi"><span>Anomalies détectées</span><strong id="kpiAnomalies">—</strong><small id="anomalyRate">—</small></article>
+      <article class="card kpi"><span>Attaques corrélées</span><strong id="kpiAttacks">—</strong><small id="kpiReports">—</small></article>
+      <article class="card kpi risk-kpi"><span>Exposition annuelle max.</span><strong id="kpiALE">—</strong><small>Annual Loss Expectancy</small></article>
+    </section>
 
-      <section class="grid two">
-        <article class="card" id="risk">
-          <div class="section-head"><div><h2>Risk intelligence</h2><p>Priorisation par probabilité et exposition financière.</p></div><span class="badge" id="riskPriority">—</span></div>
-          <div class="risk-highlight"><div><span>Probabilité d’anomalie</span><strong id="riskProbability">—</strong></div><div><span>VaR 95%</span><strong id="riskVar95">—</strong></div><div><span>VaR 99%</span><strong id="riskVar99">—</strong></div></div>
-          <div id="riskBars" class="bars"></div>
-        </article>
+    <section class="grid two">
+      <article class="card" id="risk">
+        <div class="section-head">
+          <div><h2>Risk intelligence</h2><p>Le risque est évalué événement par événement.</p></div>
+          <span class="badge" id="riskPriority">—</span>
+        </div>
+        <div class="risk-highlight">
+          <div><span>Probabilité d'anomalie</span><strong id="riskProbability">—</strong></div>
+          <div><span>Chi-square</span><strong id="riskChiSquare">—</strong></div>
+          <div><span>Stratégie</span><strong id="riskStrategy">—</strong></div>
+        </div>
+        <div class="metric-pair">
+          <div><span>VaR 95%</span><strong id="riskVar95">—</strong></div>
+          <div><span>VaR 99%</span><strong id="riskVar99">—</strong></div>
+        </div>
+        <div id="riskBars" class="bars"></div>
+      </article>
 
-        <article class="card" id="killchain">
-          <div class="section-head"><div><h2>Kill chain</h2><p>Progression observée dans le scénario.</p></div></div>
-          <div class="killchain">
-            <div class="stage"><b>01</b><span>Reconnaissance</span></div>
-            <div class="stage"><b>02</b><span>Exploitation</span></div>
-            <div class="stage"><b>03</b><span>Persistence</span></div>
-            <div class="stage"><b>04</b><span>Lateral Movement</span></div>
-            <div class="stage"><b>05</b><span>Exfiltration</span></div>
-          </div>
-        </article>
-      </section>
+      <article class="card" id="killchain">
+        <div class="section-head">
+          <div><h2>Kill chain</h2><p>Étapes observées dans le scénario d'attaque.</p></div>
+          <span id="chainSummary" class="muted">—</span>
+        </div>
+        <div id="killchainStages" class="killchain"></div>
+        <div class="timeline-note" id="timelineNote">—</div>
+      </article>
+    </section>
 
-      <section class="card" id="investigation">
-        <div class="section-head"><div><h2>Event risk feed</h2><p>Événements classés selon leur anomalie et leur risque.</p></div><span id="lastUpdate">—</span></div>
-        <div class="table-wrap"><table><thead><tr><th>Événement</th><th>Utilisateur</th><th>Anomalie</th><th>ALE</th><th>Priorité</th><th>Stratégie</th></tr></thead><tbody id="riskTable"><tr><td colspan="6" class="empty">Chargement…</td></tr></tbody></table></div>
-      </section>
+    <section class="card" id="feed">
+      <div class="section-head">
+        <div><h2>Event risk feed</h2><p>Priorisation par probabilité, perte attendue et traitement.</p></div>
+        <span id="lastUpdate" class="muted">—</span>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Événement</th><th>Utilisateur</th><th>Anomalie</th><th>Chi²</th><th>ALE</th><th>Priorité</th><th>Traitement</th></tr></thead>
+          <tbody id="riskTable"><tr><td colspan="7" class="empty">Chargement…</td></tr></tbody>
+        </table>
+      </div>
+    </section>
 
-      <section class="grid two">
-        <article class="card"><div class="section-head"><div><h2>Recommended action</h2><p>Décision issue du moteur de traitement du risque.</p></div></div><div id="recommendation" class="recommendation">Analyse en cours…</div></article>
-        <article class="card"><div class="section-head"><div><h2>Investigation status</h2><p>Corrélation, rapports et hypothèses.</p></div></div><div class="investigation-stats"><div><strong id="reports">—</strong><span>rapports générés</span></div><div><strong id="hypotheses">—</strong><span>hypothèses</span></div><div><strong id="intel">Active</strong><span>threat intelligence</span></div></div></article>
-      </section>
+    <section class="grid two" id="investigation">
+      <article class="card">
+        <div class="section-head">
+          <div><h2>Recommended action</h2><p>Décision issue du moteur de traitement du risque.</p></div>
+        </div>
+        <div id="recommendation" class="recommendation">Analyse en cours…</div>
+        <div class="controls">
+          <h3>Contrôles prioritaires</h3>
+          <ul id="controlsList"><li>—</li></ul>
+        </div>
+      </article>
 
-      <footer>LYNX · Probabilistic Threat Hunting Platform · Dashboard prototype intégré au service FastAPI</footer>
-    </main>
-  </div>
-  <script src="/dashboard/app.js"></script>
+      <article class="card">
+        <div class="section-head">
+          <div><h2>Investigation report</h2><p>Résultat de la corrélation et des hypothèses de chasse.</p></div>
+        </div>
+        <div class="investigation-stats">
+          <div><strong id="reports">—</strong><span>rapports générés</span></div>
+          <div><strong id="hypotheses">—</strong><span>hypothèses de chasse</span></div>
+          <div><strong id="techniques">—</strong><span>techniques MITRE</span></div>
+        </div>
+        <div class="report-box">
+          <div class="report-line"><span>Attack ID</span><strong id="attackId">—</strong></div>
+          <div class="report-line"><span>Source IP</span><strong id="sourceIp">—</strong></div>
+          <div class="report-line"><span>Severity</span><strong id="severity">—</strong></div>
+          <div class="report-line"><span>Confidence</span><strong id="confidence">—</strong></div>
+          <p id="narrative">—</p>
+        </div>
+      </article>
+    </section>
+
+    <div id="errorBox" class="error-box hidden"></div>
+    <footer>LYNX · Probabilistic Threat Hunting Platform · Dashboard intégré à FastAPI</footer>
+  </main>
+</div>
+<script src="/dashboard/app.js"></script>
 </body>
 </html>
