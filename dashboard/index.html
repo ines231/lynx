@@ -115,6 +115,29 @@
       </article>
     </section>
 
+
+    <section class="card" id="analysis">
+      <div class="section-head">
+        <div><h2>Investigation intelligence</h2><p>IOC, techniques MITRE et chronologie issus du rapport corrélé.</p></div>
+        <span class="muted" id="timelineEvents">0</span>
+      </div>
+      <div class="intel-grid">
+        <div>
+          <h3>Indicateurs de compromission</h3>
+          <div id="iocSummary" class="investigation-stats compact"></div>
+        </div>
+        <div>
+          <h3>Techniques MITRE ATT&amp;CK</h3>
+          <div id="mitreList" class="tags"></div>
+        </div>
+      </div>
+      <div class="facts">
+        <div><span>Hôtes affectés</span><strong id="affectedHosts">—</strong></div>
+        <div><span>Utilisateurs affectés</span><strong id="affectedUsers">—</strong></div>
+      </div>
+      <div id="timelineList" class="timeline-list"></div>
+    </section>
+
     <div id="errorBox" class="error-box hidden"></div>
     <footer>LYNX · Probabilistic Threat Hunting Platform · Dashboard intégré à FastAPI</footer>
   </main>
