@@ -38,7 +38,7 @@
 
     <section id="overview" class="kpis">
       <article class="card kpi"><span>Événements d'attaque</span><strong id="kpiEvents">—</strong><small>Scénario analysé</small></article>
-      <article class="card kpi"><span>Anomalies détectées</span><strong id="kpiAnomalies">—</strong><small id="anomalyRate">—</small></article>
+      <article class="card kpi"><span>Anomalies ML détectées</span><strong id="kpiAnomalies">—</strong><small id="anomalyRate">—</small><em class="kpi-note">Détection binaire du modèle</em></article>
       <article class="card kpi"><span>Attaques corrélées</span><strong id="kpiAttacks">—</strong><small id="kpiReports">—</small></article>
       <article class="card kpi risk-kpi"><span>Exposition annuelle max.</span><strong id="kpiALE">—</strong><small>Annual Loss Expectancy</small></article>
     </section>
@@ -49,7 +49,7 @@
           <div><h2>Risk intelligence</h2><p>Le risque est évalué événement par événement.</p></div>
           <span class="badge" id="riskPriority">—</span>
         </div>
-        <div class="risk-highlight">
+        <div class="risk-explainer">Le modèle ML décide si un événement est une anomalie. Le moteur de risque conserve une <strong>probabilité continue</strong> pour prioriser les événements.</div>\n        <div class="risk-highlight">
           <div><span>Probabilité d'anomalie</span><strong id="riskProbability">—</strong></div>
           <div><span>Chi-square</span><strong id="riskChiSquare">—</strong></div>
           <div><span>Stratégie</span><strong id="riskStrategy">—</strong></div>
