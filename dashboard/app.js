@@ -2,7 +2,7 @@ const API = window.location.origin;
 const $ = (id) => document.getElementById(id);
 
 const money = (v) => typeof v === "number"
-  ? "$" + v.toLocaleString(undefined, {maximumFractionDigits: 0})
+  ? "$" + v.toLocaleString(undefined, { maximumFractionDigits: 0 })
   : (v ?? "—");
 
 const pct = (v) => typeof v === "number"
@@ -14,8 +14,8 @@ const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({
 }[c]));
 
 async function get(path) {
-  const r = await fetch(API + path);
-  if (!r.ok) throw new Error(await r.text());
+  const r = await fetch(API + path, { headers: { "Accept": "application/json" } });
+  if (!r.ok) throw new Error(`${r.status} ${r.statusText}: ${await r.text()}`);
   return r.json();
 }
 
@@ -48,7 +48,7 @@ function renderBars(rows) {
       <div class="bar"><i style="width:${p}%"></i></div>
       <b>${pct(x.anomaly_probability)}</b>
     </div>`;
-  }).join("");
+  }).join("") || '<div class="empty">Aucune mesure disponible.</div>';
 }
 
 function renderRows(rows) {
@@ -57,7 +57,6 @@ function renderRows(rows) {
     body.innerHTML = '<tr><td colspan="7" class="empty">Aucun événement retourné.</td></tr>';
     return;
   }
-
   body.innerHTML = rows.map(x => `<tr>
     <td><strong>${esc(x.event)}</strong></td>
     <td>${esc(x.user || "—")}</td>
@@ -84,6 +83,25 @@ function renderKillChain(stages) {
 function renderControls(controls) {
   $("controlsList").innerHTML = (controls?.length ? controls : ["Maintenir la surveillance et compléter l’analyse."])
     .map(c => `<li>${esc(c)}</li>`).join("");
+}
+
+function renderIocs(report) {
+  const iocs = report?.indicators_of_compromise || {};
+  const counts = [
+    ["ips","IP"],
+    ["domains","Domaines"],
+    ["file_hashes","Hashes"],
+    ["process_names","Processus"]
+  ];
+  $("iocSummary").innerHTML = counts.map(([key,label]) =>
+    `<div><strong>${(iocs[key] || []).length}</strong><span>${label}</span></div>`
+  ).join("");
+}
+
+function renderTechniques(techniques) {
+  $("mitreList").innerHTML = (techniques?.length ? techniques : [])
+    .map(t => `<span class="tag"><b>${esc(t.technique_id)}</b> ${esc(t.description)}</span>`).join("")
+    || '<span class="muted">Aucune technique MITRE corrélée.</span>';
 }
 
 function showError(err) {
@@ -114,7 +132,7 @@ async function load() {
     )[0];
 
     const report = investigation.sample_report;
-    const reportTechniques = report?.mitre_attack_mapping || [];
+    const techniques = report?.mitre_attack_mapping || [];
     const stages = report?.kill_chain?.stages_detected || [];
     const timeline = report?.timeline || [];
     const duration = report?.attack_summary?.time_span_minutes;
@@ -123,8 +141,8 @@ async function load() {
     $("serviceBadge").className = "status-chip success";
 
     $("kpiEvents").textContent = risk.summary?.total_events ?? rows.length;
-    $("kpiAnomalies").textContent = anomaly.detection?.anomalies_detected ?? "—";
-    $("anomalyRate").textContent = anomaly.detection?.detection_rate || "Détection ML";
+    $("kpiAnomalies").textContent = anomaly.steps?.detection?.anomalies_detected ?? anomaly.detection?.anomalies_detected ?? "—";
+    $("anomalyRate").textContent = anomaly.steps?.detection?.detection_rate || anomaly.detection?.detection_rate || "Détection ML";
     $("kpiAttacks").textContent = risk.summary?.attacks_found ?? 0;
     $("kpiReports").textContent = (risk.summary?.reports_generated ?? 0) + " rapport(s) généré(s)";
     $("kpiALE").textContent = money(highest?.annual_loss_expectancy);
@@ -147,7 +165,7 @@ async function load() {
 
     $("reports").textContent = investigation.results?.reporting?.investigation_reports ?? 0;
     $("hypotheses").textContent = investigation.results?.reporting?.hypotheses_generated ?? 0;
-    $("techniques").textContent = reportTechniques.length;
+    $("techniques").textContent = techniques.length;
 
     $("recommendation").innerHTML = highest
       ? `<strong>${esc(highest.priority || "Priorité")} — ${esc(highest.strategy || "Traitement à définir")}</strong>
@@ -157,16 +175,32 @@ async function load() {
       : "Aucune recommandation disponible.";
 
     renderControls(highest?.recommended_controls);
+    renderIocs(report);
+    renderTechniques(techniques);
 
     $("attackId").textContent = report?.attack_summary?.attack_id || "—";
     $("sourceIp").textContent = report?.attack_summary?.source_ip || "—";
     $("severity").textContent = report?.attack_summary?.severity || "—";
     $("confidence").textContent = pct(report?.attack_summary?.confidence);
     $("narrative").textContent = report?.kill_chain?.narrative || "Aucun récit d’investigation disponible.";
+    $("affectedHosts").textContent = (report?.attack_summary?.affected_hosts || []).join(", ") || "—";
+    $("affectedUsers").textContent = (report?.attack_summary?.affected_users || []).join(", ") || "—";
+    $("timelineEvents").textContent = String(timeline.length);
+
+    renderInvestigationTimeline(timeline);
   } catch (err) {
     console.error(err);
     showError(err);
   }
+}
+
+function renderInvestigationTimeline(timeline) {
+  $("timelineList").innerHTML = (timeline?.length ? timeline : [])
+    .map(t => `<div class="timeline-item">
+      <span class="timeline-seq">#${t.sequence}</span>
+      <div><strong>${esc(t.event_type)}</strong><small>${esc(t.timestamp || "—")} · ${esc(t.description || "")}</small></div>
+      <span class="priority ${priorityClass(t.severity)}">${esc(t.severity || "—")}</span>
+    </div>`).join("") || '<div class="empty">Aucun événement dans la timeline.</div>';
 }
 
 $("refreshBtn").addEventListener("click", load);
