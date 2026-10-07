@@ -194,13 +194,25 @@ async function load() {
   }
 }
 
+function formatTimestamp(value) {
+  if (!value) return "—";
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return String(value);
+  return d.toLocaleString("fr-FR", { dateStyle: "short", timeStyle: "medium" });
+}
+
 function renderInvestigationTimeline(timeline) {
   $("timelineList").innerHTML = (timeline?.length ? timeline : [])
-    .map(t => `<div class="timeline-item">
-      <span class="timeline-seq">#${t.sequence}</span>
-      <div><strong>${esc(t.event_type)}</strong><small>${esc(t.timestamp || "—")} · ${esc(t.description || "")}</small></div>
-      <span class="priority ${priorityClass(t.severity)}">${esc(t.severity || "—")}</span>
-    </div>`).join("") || '<div class="empty">Aucun événement dans la timeline.</div>';
+    .map(t => {
+      const actor = t.user && t.user !== "None" ? t.user : "—";
+      const host = t.hostname || t.host || "—";
+      const description = t.description || `${t.event_type || "Événement"} · ${actor} · ${host}`;
+      return `<div class="timeline-item">
+        <span class="timeline-seq">#${t.sequence}</span>
+        <div><strong>${esc(t.event_type)}</strong><small>${esc(formatTimestamp(t.timestamp))} · ${esc(description)}</small></div>
+        <span class="priority ${priorityClass(t.severity)}">${esc(t.severity || "—")}</span>
+      </div>`;
+    }).join("") || '<div class="empty">Aucun événement dans la timeline.</div>';
 }
 
 $("refreshBtn").addEventListener("click", load);
