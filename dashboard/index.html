@@ -41,11 +41,11 @@
         <article class="card" id="killchain">
           <div class="section-head"><div><h2>Kill chain</h2><p>Progression observée dans le scénario.</p></div></div>
           <div class="killchain">
-            <div class="stage"><b>01</b><span>Reconnaissance</span></div>
-            <div class="stage"><b>02</b><span>Exploitation</span></div>
-            <div class="stage"><b>03</b><span>Persistence</span></div>
-            <div class="stage"><b>04</b><span>Lateral Movement</span></div>
-            <div class="stage"><b>05</b><span>Exfiltration</span></div>
+            <div class="stage" data-stage="reconnaissance"><b>01</b><span>Reconnaissance</span></div>
+            <div class="stage" data-stage="exploitation"><b>02</b><span>Exploitation</span></div>
+            <div class="stage" data-stage="persistence"><b>03</b><span>Persistence</span></div>
+            <div class="stage" data-stage="lateral_movement"><b>04</b><span>Lateral Movement</span></div>
+            <div class="stage" data-stage="exfiltration"><b>05</b><span>Exfiltration</span></div>
           </div>
         </article>
       </section>
@@ -53,6 +53,13 @@
       <section class="card" id="investigation">
         <div class="section-head"><div><h2>Event risk feed</h2><p>Événements classés selon leur anomalie et leur risque.</p></div><span id="lastUpdate">—</span></div>
         <div class="table-wrap"><table><thead><tr><th>Événement</th><th>Utilisateur</th><th>Anomalie</th><th>ALE</th><th>Priorité</th><th>Stratégie</th></tr></thead><tbody id="riskTable"><tr><td colspan="6" class="empty">Chargement…</td></tr></tbody></table></div>
+      </section>
+
+      <section class="card report-card">
+        <div class="section-head"><div><h2>Investigation report preview</h2><p>Synthèse générée à partir de la corrélation des événements.</p></div><span id="reportStatus" class="badge">—</span></div>
+        <div class="report-grid"><div><span class="label">Attack ID</span><strong id="reportId">—</strong></div><div><span class="label">Source IP</span><strong id="reportSource">—</strong></div><div><span class="label">Confidence</span><strong id="reportConfidence">—</strong></div><div><span class="label">MITRE techniques</span><strong id="reportMitre">—</strong></div></div>
+        <p id="reportNarrative" class="report-narrative">Aucun rapport disponible.</p>
+        <div class="report-columns"><div><h3>IOCs</h3><div id="reportIocs" class="chips"></div></div><div><h3>Next steps</h3><ul id="reportNextSteps" class="next-steps"></ul></div></div>
       </section>
 
       <section class="grid two">
