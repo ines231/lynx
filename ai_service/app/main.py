@@ -1,4 +1,6 @@
 from fastapi import FastAPI
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 import logging
@@ -43,6 +45,14 @@ app.include_router(events.router)
 app.include_router(anomalies.router)
 app.include_router(investigations.router)
 app.include_router(risk.router)
+
+# Integrated analyst dashboard
+DASHBOARD_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "dashboard"))
+app.mount("/dashboard", StaticFiles(directory=DASHBOARD_DIR), name="dashboard")
+
+@app.get("/dashboard-ui", include_in_schema=False)
+async def dashboard_ui():
+    return FileResponse(os.path.join(DASHBOARD_DIR, "index.html"))
 
 @app.get("/health")
 async def health_check():
