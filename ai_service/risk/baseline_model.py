@@ -1,7 +1,9 @@
 import numpy as np
 import pandas as pd
-from typing import Dict, List, Any
+from typing import Dict, List, Any, Optional
 import logging
+
+from ai_service.risk.common import is_sensitive_path
 
 logger = logging.getLogger(__name__)
 
@@ -45,6 +47,10 @@ class BaselineModel:
             "network_patterns": self._analyze_network_patterns(events),
             "file_patterns": self._analyze_file_patterns(events),
             "severity_distribution": self._analyze_severity_distribution(events),
+            # Full (untruncated) event-type counts: required by the chi-square test.
+            "event_types": self._get_distribution(
+                events, "event_type", limit=None
+            ),
         }
 
         self.user_baselines[user] = baseline
@@ -160,6 +166,10 @@ class BaselineModel:
 
         return {
             "typical_processes": proc_dist.head(10).index.tolist(),
+            # Full counts (used by the chi-square process test)
+            "counts": {
+                str(name): int(count) for name, count in proc_dist.items()
+            },
             "process_count": len(set(processes)),
             "most_common": (
                 proc_dist.index[0]
@@ -206,6 +216,15 @@ class BaselineModel:
                 if ips
                 else []
             ),
+            # Full port counts (used by the chi-square port test)
+            "port_counts": (
+                {
+                    str(int(port)): int(count)
+                    for port, count in pd.Series(ports).value_counts().items()
+                }
+                if ports
+                else {}
+            ),
             "port_mean": (
                 float(np.mean(ports))
                 if ports
@@ -241,18 +260,10 @@ class BaselineModel:
         return {
             "file_count": len(set(files)),
             "typical_files": file_dist.head(10).index.tolist(),
+            # "hr" used to match any path containing the letters "hr"
+            # (e.g. "Chrome", "shared"); is_sensitive_path matches whole segments.
             "sensitive_files_accessed": sum(
-                1
-                for file_path in files
-                if any(
-                    keyword in str(file_path).lower()
-                    for keyword in [
-                        "confidential",
-                        "secret",
-                        "finance",
-                        "hr",
-                    ]
-                )
+                1 for file_path in files if is_sensitive_path(file_path)
             ),
         }
 
@@ -279,9 +290,10 @@ class BaselineModel:
     @staticmethod
     def _get_distribution(
         events: List[Any],
-        key: str
+        key: str,
+        limit: Optional[int] = 10
     ) -> Dict[str, int]:
-        """Get value distribution for a key."""
+        """Get value distribution for a key (``limit=None`` keeps every value)."""
 
         values = [
             BaselineModel._get_value(event, key)
@@ -294,9 +306,12 @@ class BaselineModel:
 
         dist = pd.Series(values).value_counts()
 
+        if limit is not None:
+            dist = dist.head(limit)
+
         return {
             str(key_value): int(count)
-            for key_value, count in dist.head(10).items()
+            for key_value, count in dist.items()
         }
 
     @staticmethod

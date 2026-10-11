@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import Optional, Dict, Any
 from datetime import datetime
 
@@ -55,7 +55,9 @@ class ThreatIntelResult(BaseModel):
     is_malicious: bool
     source: str  # mock_intelowl, real_intelowl
     details: Dict[str, Any] = {}
-    checked_at: datetime = datetime.utcnow()
+    # default_factory: a plain default is evaluated once at import time, so
+    # every result carried the server start time instead of its own check time.
+    checked_at: datetime = Field(default_factory=datetime.utcnow)
 
 class EnrichedEvent(BaseModel):
     """Event enriched with threat intelligence"""

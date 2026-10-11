@@ -3,6 +3,8 @@ from typing import Dict, Any, Tuple
 from scipy import stats
 import logging
 
+from ai_service.risk.common import is_private_ip
+
 logger = logging.getLogger(__name__)
 
 
@@ -73,12 +75,32 @@ class AnomalyProbability:
         probabilities.append(network_prob)
         details["network_anomaly"] = network_prob
 
-        # Weighted combination
-        combined_prob = (
-            0.30 * time_prob +
-            0.35 * process_prob +
-            0.35 * network_prob
+        # Event-type rarity: how unusual is this kind of event for this
+        # baseline? Before this component the score ignored the event type
+        # entirely, so a privilege escalation from a "known" process and no
+        # network fields scored 10%.
+        type_prob = self._event_type_anomaly_probability(
+            event,
+            baseline
         )
+
+        if type_prob is not None:
+            probabilities.append(type_prob)
+            details["event_type_anomaly"] = type_prob
+
+            combined_prob = (
+                0.20 * time_prob +
+                0.25 * process_prob +
+                0.25 * network_prob +
+                0.30 * type_prob
+            )
+        else:
+            # Old baselines without event_types keep the previous weights.
+            combined_prob = (
+                0.30 * time_prob +
+                0.35 * process_prob +
+                0.35 * network_prob
+            )
 
         details["combined_probability"] = float(combined_prob)
         details["is_anomaly"] = combined_prob > 0.5
@@ -146,12 +168,15 @@ class AnomalyProbability:
                     / hour_std
                 )
 
-                # Convert deviation into an intuitive
-                # anomaly score rather than returning
-                # the small statistical tail probability.
-                prob = 1 - stats.norm.sf(z_score)
+                # Two-sided deviation score in [0, 1]:
+                #   P(|Z| <= z) = 1 - 2 * sf(z)
+                # The previous 1 - sf(z) was the one-sided CDF, which is
+                # already 0.5 for z = 0, so even a typical hour looked
+                # "50% anomalous". The floor keeps an off-peak hour at least
+                # as suspicious as an hour listed in the baseline (0.1).
+                prob = 1.0 - 2.0 * stats.norm.sf(z_score)
 
-                return min(max(float(prob), 0.0), 1.0)
+                return min(max(float(prob), 0.1), 0.95)
 
             return 0.1
 
@@ -160,6 +185,54 @@ class AnomalyProbability:
                 f"Time anomaly error: {e}"
             )
             return 0.3
+
+    def _event_type_anomaly_probability(
+        self,
+        event: Any,
+        baseline: Dict[str, Any]
+    ):
+        """
+        Rarity of the event type in the baseline, in [0.1, 0.95].
+
+        Uses Lidstone-smoothed frequencies so an unseen type gets a small
+        non-zero probability, then scores the type relative to the most
+        common one: 1 - p(type) / p(most common type).
+        Returns None when the baseline has no event-type counts.
+        """
+
+        counts = baseline.get("event_types") or {}
+
+        event_type = str(
+            self._get_value(event, "event_type", "") or ""
+        )
+
+        if not counts or not event_type:
+            return None
+
+        try:
+            counts = {
+                str(name): float(count)
+                for name, count in counts.items()
+                if float(count) > 0
+            }
+        except (TypeError, ValueError):
+            return None
+
+        if not counts:
+            return None
+
+        alpha = 0.5
+        categories = len(counts) + (
+            0 if event_type in counts else 1
+        )
+        denominator = sum(counts.values()) + alpha * categories
+
+        p_event = (counts.get(event_type, 0.0) + alpha) / denominator
+        p_max = (max(counts.values()) + alpha) / denominator
+
+        score = 1.0 - p_event / p_max
+
+        return min(max(float(score), 0.1), 0.95)
 
     def _process_anomaly_probability(
         self,
@@ -191,9 +264,11 @@ class AnomalyProbability:
             []
         )
 
+        # Ignore empty names: "" in any string is always True.
         typical_processes = [
             str(process).lower()
             for process in typical_processes
+            if process
         ]
 
         if any(
@@ -231,10 +306,12 @@ class AnomalyProbability:
             ""
         )
 
+        # No default port: a missing port must not be treated as the
+        # typical 443.
         dest_port = self._get_value(
             event,
             "destination_port",
-            443
+            None
         )
 
         dest_ip = str(dest_ip or "")
@@ -257,30 +334,27 @@ class AnomalyProbability:
             []
         )
 
-        ip_is_typical = (
-            any(
-                str(tip) in dest_ip
-                for tip in typical_ips
-            )
-            if typical_ips
-            else False
-        )
+        # Exact match: the old substring test made "192.168.1.10" match
+        # "192.168.1.100".
+        ip_is_typical = dest_ip in {
+            str(tip) for tip in typical_ips
+        }
 
-        port_is_typical = (
-            dest_port in typical_ports
-            if typical_ports
-            else False
-        )
+        try:
+            port_is_typical = (
+                dest_port is not None
+                and int(dest_port) in {
+                    int(port) for port in typical_ports
+                }
+            )
+        except (TypeError, ValueError):
+            port_is_typical = False
 
         if ip_is_typical and port_is_typical:
             return 0.1
 
-        # RFC1918 private network ranges
-        is_private = (
-            dest_ip.startswith("192.168.")
-            or dest_ip.startswith("10.")
-            or dest_ip.startswith("172.")
-        )
+        # Real RFC1918 check (172.x is private only for 172.16.0.0/12).
+        is_private = is_private_ip(dest_ip)
 
         if not is_private:
             return 0.6
