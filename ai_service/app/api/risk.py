@@ -1,5 +1,7 @@
 from fastapi import APIRouter, HTTPException
+from typing import Optional
 import logging
+import random
 import traceback
 
 from ai_service.risk.baseline_model import baseline_model
@@ -21,6 +23,18 @@ router = APIRouter(
     prefix="/api/risk",
     tags=["risk"]
 )
+
+# The baseline must describe NORMAL behaviour. generate_events() draws from all
+# event types by default, including port_scan, privilege_escalation and
+# lateral_movement, which polluted the "normal" baseline with attack events and
+# made the chi-square test unable to tell the attack scenario apart.
+NORMAL_EVENT_TYPES = [
+    "login",
+    "process_execution",
+    "file_access",
+    "network_connection",
+    "dns_query",
+]
 
 
 def _model_to_dict(model):
@@ -105,7 +119,8 @@ async def risk_engine_demo():
         )
 
         normal_events = mock_wazuh.generate_events(
-            count=30
+            count=30,
+            event_types=NORMAL_EVENT_TYPES
         )
 
         enriched_normal = []
@@ -393,10 +408,13 @@ async def risk_engine_demo():
 
 @router.get("/analyze")
 async def analyze_with_risk_engine(
-    normal_count: int = 30
+    normal_count: int = 30,
+    seed: Optional[int] = None
 ):
     """
     Full risk analysis pipeline.
+
+    `seed` makes the mock data (and therefore every figure) reproducible.
     """
 
     try:
@@ -405,13 +423,17 @@ async def analyze_with_risk_engine(
             "=== RISK ANALYSIS START ==="
         )
 
+        if seed is not None:
+            random.seed(seed)
+
         # =========================================================
         # STEP 1 - BASELINE
         # =========================================================
 
         normal_events = (
             mock_wazuh.generate_events(
-                count=normal_count
+                count=normal_count,
+                event_types=NORMAL_EVENT_TYPES
             )
         )
 
@@ -476,6 +498,8 @@ async def analyze_with_risk_engine(
 
         # Chi-square is a distribution test, so it must be computed
         # on the complete attack window rather than on one event.
+        # chi2_prob = 1 - p_value: evidence that the window deviates from
+        # the baseline (close to 1 = very unusual, close to 0 = normal).
         chi2_prob, chi2_details = (
             chi_square_tests.test_event_type_distribution(
                 enriched_attack,
@@ -634,6 +658,8 @@ async def analyze_with_risk_engine(
             },
 
             "event_risks": event_risks,
+
+            "chi_square": chi2_details,
 
             "attacks": len(
                 attacks

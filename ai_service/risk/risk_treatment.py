@@ -1,5 +1,8 @@
 from typing import Dict, List, Any
+import math
 import logging
+
+from ai_service.risk.common import fair_category
 
 logger = logging.getLogger(__name__)
 
@@ -156,8 +159,10 @@ class RiskTreatment:
         # Get specific controls
         # ---------------------------------------------------------
 
+        # Match on the raw type AND the FAIR category (port_scan ->
+        # reconnaissance, service_installation -> persistence, ...).
         controls = self._get_controls_for_event(
-            event_type,
+            f"{event_type} {fair_category(event)}",
             treatment_strategy
         )
 
@@ -288,8 +293,14 @@ class RiskTreatment:
                 ]
             )
 
-        # Remove duplicates
-        return list(set(controls))
+        # Remove duplicates but keep a stable order (set() reshuffled the
+        # controls between runs, so "first 2 controls" changed every call).
+        return list(dict.fromkeys(controls))
+
+    # Reference values (the model's "neutral" TEF, vulnerability and PLM).
+    _REFERENCE_TEF = 0.01
+    _REFERENCE_VULNERABILITY = 0.2
+    _REFERENCE_PLM = 5000.0
 
     @staticmethod
     def _identify_risk_drivers(
@@ -297,19 +308,35 @@ class RiskTreatment:
         vulnerability: float,
         plm: float
     ) -> Dict[str, str]:
-        """Identify which components drive risk."""
+        """Identify which components drive risk.
+
+        ALE = TEF x Vulnerability x PLM is multiplicative and the three
+        factors have different units (events/year, probability, dollars), so
+        they cannot be summed. Each factor is compared to its reference value
+        and its share is its part of the total log-uplift.
+        """
 
         drivers = {}
 
-        # Normalize components to allow comparison
-        total = tef + vulnerability + plm
+        uplifts = [
+            math.log(max(tef / RiskTreatment._REFERENCE_TEF, 1.0)),
+            math.log(
+                max(
+                    vulnerability / RiskTreatment._REFERENCE_VULNERABILITY,
+                    1.0
+                )
+            ),
+            math.log(max(plm / RiskTreatment._REFERENCE_PLM, 1.0)),
+        ]
+
+        total = sum(uplifts)
 
         if total > 0:
-            tef_pct = (tef / total) * 100
-            v_pct = (vulnerability / total) * 100
-            plm_pct = (plm / total) * 100
+            tef_pct, v_pct, plm_pct = (
+                (uplift / total) * 100 for uplift in uplifts
+            )
         else:
-            tef_pct = v_pct = plm_pct = 33.0
+            tef_pct = v_pct = plm_pct = 0.0
 
         if tef_pct > 40:
             drivers["threat_frequency"] = (
@@ -396,7 +423,8 @@ class RiskTreatment:
         if affected_users:
             affected = affected_users[0]
         else:
-            affected = "Unknown"
+            # SecurityEvent has a single "user" field, not "affected_users".
+            affected = self._get_value(event, "user", None) or "Unknown"
 
         event_type = str(event_type or "Unknown")
         source = str(source or "Unknown")

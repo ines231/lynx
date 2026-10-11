@@ -1,6 +1,8 @@
 import numpy as np
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 import logging
+
+from ai_service.risk.common import fair_category, is_sensitive_path
 
 logger = logging.getLogger(__name__)
 
@@ -20,8 +22,16 @@ class MonteCarloFAIR:
     - Expected Shortfall
     """
 
-    def __init__(self, simulations: int = 10000):
+    def __init__(
+        self,
+        simulations: int = 10000,
+        seed: Optional[int] = 42
+    ):
         self.simulations = simulations
+        # A fixed seed makes the simulation a deterministic function of its
+        # inputs (same event -> same ALE/VaR), which is needed to reproduce
+        # the figures quoted in a report. Use seed=None for fresh randomness.
+        self.seed = seed
 
     @staticmethod
     def _get_value(event: Any, key: str, default=None):
@@ -91,10 +101,22 @@ class MonteCarloFAIR:
 
         annual_loss_expectancy = lef * plm
 
-        # Use only positive losses for percentile calculations
+        # NOTE: value_at_risk_95 / _99 / expected_shortfall_95 are computed on
+        # the simulated years in which at least one loss event occurs, i.e.
+        # they are *conditional* on a loss happening. The unconditional
+        # annual VaR (all simulated years, zeros included) is reported
+        # separately as value_at_risk_95_annual.
         positive_losses = loss_dist[
             loss_dist > 0
         ]
+
+        probability_of_loss = float(
+            np.mean(loss_dist > 0)
+        )
+
+        var_95_annual = float(
+            np.percentile(loss_dist, 95)
+        )
 
         if len(positive_losses) > 0:
             var_95 = float(
@@ -135,6 +157,9 @@ class MonteCarloFAIR:
             "value_at_risk_95": var_95,
             "value_at_risk_99": var_99,
             "expected_shortfall_95": expected_shortfall_95,
+            "value_at_risk_95_annual": var_95_annual,
+            "probability_of_loss": probability_of_loss,
+            "simulated_mean_loss": float(np.mean(loss_dist)),
 
             # Keep only a sample for API responses
             "loss_distribution": loss_dist.tolist()[:100],
@@ -158,15 +183,10 @@ class MonteCarloFAIR:
 
         base_tef = 0.01
 
-        event_type = self._get_value(
-            event,
-            "event_type",
-            ""
-        )
-
-        event_type = str(
-            event_type or ""
-        ).lower()
+        # Raw event types (port_scan, service_installation, ...) are mapped to
+        # the FAIR categories below; without this mapping those multipliers
+        # were never applied.
+        event_type = fair_category(event)
 
         event_multipliers = {
             "privilege_escalation": 5.0,
@@ -270,15 +290,7 @@ class MonteCarloFAIR:
 
         base_loss = 5000.0
 
-        event_type = self._get_value(
-            event,
-            "event_type",
-            ""
-        )
-
-        event_type = str(
-            event_type or ""
-        ).lower()
+        event_type = fair_category(event)
 
         multipliers = {
             "exfiltration": 50000,
@@ -302,21 +314,9 @@ class MonteCarloFAIR:
             ""
         )
 
-        file_path = str(
-            file_path or ""
-        ).lower()
-
-        sensitive_keywords = [
-            "finance",
-            "confidential",
-            "hr",
-            "salary",
-        ]
-
-        if any(
-            keyword in file_path
-            for keyword in sensitive_keywords
-        ):
+        # The old keyword list ("finance", ...) missed "Financial\\reports.xlsx"
+        # and matched "hr" inside unrelated words.
+        if is_sensitive_path(file_path):
             base_loss *= 3
 
         return float(base_loss)
@@ -336,7 +336,9 @@ class MonteCarloFAIR:
         of each loss event.
         """
 
-        num_events = np.random.poisson(
+        rng = np.random.default_rng(self.seed)
+
+        num_events = rng.poisson(
             lef,
             self.simulations
         )
@@ -348,29 +350,29 @@ class MonteCarloFAIR:
             dtype=float
         )
 
-        active = num_events > 0
+        total_events = int(num_events.sum())
 
-        # Number of simulations where at least one
-        # loss event occurs.
-        active_count = np.sum(active)
-
-        if active_count == 0:
+        if total_events == 0 or plm <= 0:
             return total_losses
 
-        # Generate losses for each simulation.
-        for index in np.where(active)[0]:
+        # One lognormal draw per loss event (mean of each draw == plm),
+        # then summed per simulated year. Vectorised: no Python loop.
+        event_losses = rng.lognormal(
+            mean=np.log(plm) - sigma ** 2 / 2,
+            sigma=sigma,
+            size=total_events
+        )
 
-            n_events = num_events[index]
+        year_index = np.repeat(
+            np.arange(self.simulations),
+            num_events
+        )
 
-            event_losses = np.random.lognormal(
-                mean=np.log(plm) - sigma ** 2 / 2,
-                sigma=sigma,
-                size=n_events
-            )
-
-            total_losses[index] = float(
-                np.sum(event_losses)
-            )
+        total_losses = np.bincount(
+            year_index,
+            weights=event_losses,
+            minlength=self.simulations
+        ).astype(float)
 
         return total_losses
 
