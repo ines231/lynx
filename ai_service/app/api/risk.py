@@ -1,7 +1,6 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Response
 from typing import Optional
 import logging
-import random
 import traceback
 
 from ai_service.risk.baseline_model import baseline_model
@@ -9,11 +8,19 @@ from ai_service.risk.anomaly_probability import anomaly_probability
 from ai_service.risk.chi_square_tests import chi_square_tests
 from ai_service.risk.monte_carlo_fair import monte_carlo_fair
 from ai_service.risk.risk_treatment import risk_treatment
+from ai_service.risk.pipeline import (
+    NORMAL_EVENT_TYPES,
+    analysis_store,
+    enriched_event_to_dict as _enriched_event_to_dict,
+    public_view,
+    run_analysis,
+)
 
 from ai_service.connectors.wazuh.mock_wazuh import mock_wazuh
 from ai_service.enrichment.enrichment_service import enrichment_service
 from ai_service.correlation.kill_chain import kill_chain_correlator
 from ai_service.reports.investigation_report import report_generator
+from ai_service.reports.pdf_report import build_risk_report
 from ai_service.hypotheses.hypothesis_generator import hypothesis_generator
 
 
@@ -24,51 +31,6 @@ router = APIRouter(
     tags=["risk"]
 )
 
-# The baseline must describe NORMAL behaviour. generate_events() draws from all
-# event types by default, including port_scan, privilege_escalation and
-# lateral_movement, which polluted the "normal" baseline with attack events and
-# made the chi-square test unable to tell the attack scenario apart.
-NORMAL_EVENT_TYPES = [
-    "login",
-    "process_execution",
-    "file_access",
-    "network_connection",
-    "dns_query",
-]
-
-
-def _model_to_dict(model):
-    """
-    Convert Pydantic v1/v2 models to dictionaries.
-    """
-    if hasattr(model, "model_dump"):
-        return model.model_dump()
-
-    if hasattr(model, "dict"):
-        return model.dict()
-
-    if isinstance(model, dict):
-        return model
-
-    return {}
-
-
-def _enriched_event_to_dict(enriched):
-    """
-    Convert an EnrichedEvent object into a normal dictionary.
-    """
-
-    event_dict = _model_to_dict(enriched.event)
-
-    threat_intel_dict = {}
-
-    for key, value in enriched.threat_intel.items():
-        threat_intel_dict[key] = _model_to_dict(value)
-
-    event_dict["threat_intel"] = threat_intel_dict
-
-    return event_dict
-
 
 @router.get("/")
 async def get_risk_info():
@@ -78,6 +40,7 @@ async def get_risk_info():
         "endpoints": [
             "GET /api/risk/demo - Full risk engine demo",
             "GET /api/risk/analyze - Complete risk analysis",
+            "GET /api/risk/report.pdf - Structured PDF report",
             "POST /api/risk/calculate-risk - Risk for single event"
         ]
     }
@@ -406,6 +369,8 @@ async def risk_engine_demo():
         )
 
 
+
+
 @router.get("/analyze")
 async def analyze_with_risk_engine(
     normal_count: int = 30,
@@ -415,275 +380,83 @@ async def analyze_with_risk_engine(
     Full risk analysis pipeline.
 
     `seed` makes the mock data (and therefore every figure) reproducible.
+    The response carries an `analysis_id`: pass it to `/report.pdf` to download
+    the report of exactly this analysis.
     """
 
     try:
+        logger.info("=== RISK ANALYSIS START ===")
 
-        logger.info(
-            "=== RISK ANALYSIS START ==="
-        )
+        analysis = await run_analysis(normal_count=normal_count, seed=seed)
+        analysis_store.put(analysis)
 
-        if seed is not None:
-            random.seed(seed)
+        logger.info("=== ANALYSIS COMPLETE ===")
 
-        # =========================================================
-        # STEP 1 - BASELINE
-        # =========================================================
-
-        normal_events = (
-            mock_wazuh.generate_events(
-                count=normal_count,
-                event_types=NORMAL_EVENT_TYPES
-            )
-        )
-
-        enriched_normal = []
-
-        for event in normal_events:
-
-            enriched = (
-                await enrichment_service.enrich_event(
-                    event
-                )
-            )
-
-            enriched_dict = (
-                _enriched_event_to_dict(
-                    enriched
-                )
-            )
-
-            enriched_normal.append(
-                enriched_dict
-            )
-
-        baseline = (
-            baseline_model.build_user_baseline(
-                "analysis_user",
-                enriched_normal
-            )
-        )
-
-        # =========================================================
-        # STEP 2 - ATTACK SCENARIO
-        # =========================================================
-
-        attack_events = (
-            mock_wazuh.generate_attack_scenario()
-        )
-
-        enriched_attack = []
-
-        for event in attack_events:
-
-            enriched = (
-                await enrichment_service.enrich_event(
-                    event
-                )
-            )
-
-            enriched_dict = (
-                _enriched_event_to_dict(
-                    enriched
-                )
-            )
-
-            enriched_attack.append(
-                enriched_dict
-            )
-
-        # =========================================================
-        # STEP 3 - RISK CALCULATION
-        # =========================================================
-
-        # Chi-square is a distribution test, so it must be computed
-        # on the complete attack window rather than on one event.
-        # chi2_prob = 1 - p_value: evidence that the window deviates from
-        # the baseline (close to 1 = very unusual, close to 0 = normal).
-        chi2_prob, chi2_details = (
-            chi_square_tests.test_event_type_distribution(
-                enriched_attack,
-                baseline
-            )
-        )
-
-        event_risks = []
-
-        for event in enriched_attack:
-
-            anomaly_prob, anomaly_details = (
-                anomaly_probability.calculate_probability(
-                    event,
-                    baseline
-                )
-            )
-
-            # Chi-square describes the statistical deviation of the
-            # complete attack distribution. It is therefore shared as
-            # scenario context across the event-level risk feed.
-
-            # FAIR
-            risk_metrics = (
-                monte_carlo_fair.calculate_risk(
-                    event,
-                    anomaly_prob
-                )
-            )
-
-            # Treatment
-            treatment = (
-                risk_treatment.recommend_treatment(
-                    risk_metrics,
-                    event
-                )
-            )
-
-            event_risks.append(
-                {
-                    "event": event.get(
-                        "event_type"
-                    ),
-
-                    "user": event.get(
-                        "user"
-                    ),
-
-                    "anomaly_probability": float(
-                        anomaly_prob
-                    ),
-
-                    "chi_square_probability": float(
-                        chi2_prob
-                    ),
-
-                    "annual_loss_expectancy": float(
-                        risk_metrics.get(
-                            "annual_loss_expectancy",
-                            0
-                        )
-                    ),
-
-                    "value_at_risk_95": float(
-                        risk_metrics.get(
-                            "value_at_risk_95",
-                            0
-                        )
-                    ),
-
-                    "value_at_risk_99": float(
-                        risk_metrics.get(
-                            "value_at_risk_99",
-                            0
-                        )
-                    ),
-
-                    "priority": treatment.get(
-                        "priority"
-                    ),
-
-                    "strategy": treatment.get(
-                        "treatment_strategy"
-                    ),
-
-                    "recommended_controls": (
-                        treatment.get(
-                            "recommended_controls",
-                            []
-                        )[:2]
-                    )
-                }
-            )
-
-        # =========================================================
-        # STEP 4 - KILL CHAIN
-        # =========================================================
-
-        attacks = (
-            kill_chain_correlator.correlate_events(
-                enriched_attack
-            )
-        )
-
-        # =========================================================
-        # STEP 5 - REPORTS
-        # =========================================================
-
-        reports = []
-
-        for attack in attacks:
-
-            reports.append(
-                report_generator.generate_report(
-                    attack
-                )
-            )
-
-        # =========================================================
-        # STEP 6 - HYPOTHESES
-        # =========================================================
-
-        hypotheses = []
-
-        for attack in attacks:
-
-            hypotheses.extend(
-                hypothesis_generator.generate_hypotheses_from_attack(
-                    attack
-                )
-            )
-
-        logger.info(
-            "=== ANALYSIS COMPLETE ==="
-        )
-
-        return {
-            "status": "success",
-
-            "summary": {
-                "total_events": len(
-                    enriched_attack
-                ),
-
-                "attacks_found": len(
-                    attacks
-                ),
-
-                "reports_generated": len(
-                    reports
-                ),
-
-                "hypotheses_generated": len(
-                    hypotheses
-                )
-            },
-
-            "event_risks": event_risks,
-
-            "chi_square": chi2_details,
-
-            "attacks": len(
-                attacks
-            ),
-
-            "reports": len(
-                reports
-            )
-        }
+        return public_view(analysis)
 
     except Exception as e:
 
-        logger.error(
-            f"Analysis error: {e}"
+        logger.error(f"Analysis error: {e}")
+        logger.error(traceback.format_exc())
+
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/report.pdf")
+async def download_risk_report(
+    analysis_id: Optional[str] = None,
+    normal_count: int = 30,
+    seed: Optional[int] = None
+):
+    """
+    Structured PDF report.
+
+    * with `analysis_id` (returned by `/analyze`): the PDF contains exactly the
+      figures the dashboard is showing; 410 if that analysis is no longer in
+      memory (server restarted or too many newer analyses);
+    * without it: a fresh analysis is run (use `seed` to make it reproducible).
+    """
+
+    try:
+        if analysis_id:
+            analysis = analysis_store.get(analysis_id)
+
+            if analysis is None:
+                raise HTTPException(
+                    status_code=410,
+                    detail=(
+                        "Analyse expirée (serveur redémarré ou analyse "
+                        "trop ancienne) : relancez l'analyse."
+                    )
+                )
+        else:
+            analysis = await run_analysis(
+                normal_count=normal_count, seed=seed
+            )
+            analysis_store.put(analysis)
+
+        pdf_bytes = build_risk_report(analysis)
+
+        filename = f"lynx-rapport-{analysis['analysis_id']}.pdf"
+
+        return Response(
+            content=pdf_bytes,
+            media_type="application/pdf",
+            headers={
+                "Content-Disposition": f'attachment; filename="{filename}"',
+                "Cache-Control": "no-store",
+            },
         )
 
-        logger.error(
-            traceback.format_exc()
-        )
+    except HTTPException:
+        raise
 
-        raise HTTPException(
-            status_code=500,
-            detail=str(e)
-        )
+    except Exception as e:
+
+        logger.error(f"Report error: {e}")
+        logger.error(traceback.format_exc())
+
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 # Singleton router is imported by the FastAPI application.

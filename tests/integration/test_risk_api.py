@@ -61,3 +61,35 @@ def test_demo_endpoint_still_works():
     response = client.get("/api/risk/demo")
     assert response.status_code == 200
     assert response.json()["status"] == "success"
+
+
+def test_analyze_returns_an_analysis_id():
+    data = client.get("/api/risk/analyze?seed=7").json()
+
+    assert data["analysis_id"]
+    assert data["chi_square"]["method"] in {"asymptotic", "monte_carlo"}
+
+
+def test_report_pdf_for_the_analysis_shown_on_the_dashboard():
+    analysis_id = client.get("/api/risk/analyze?seed=7").json()["analysis_id"]
+
+    response = client.get(f"/api/risk/report.pdf?analysis_id={analysis_id}")
+
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "application/pdf"
+    assert "attachment" in response.headers["content-disposition"]
+    assert analysis_id in response.headers["content-disposition"]
+    assert response.content.startswith(b"%PDF")
+
+
+def test_report_pdf_with_an_unknown_analysis_id_is_gone():
+    response = client.get("/api/risk/report.pdf?analysis_id=doesnotexist")
+
+    assert response.status_code == 410
+
+
+def test_report_pdf_without_an_id_runs_a_fresh_analysis():
+    response = client.get("/api/risk/report.pdf?seed=3")
+
+    assert response.status_code == 200
+    assert response.content.startswith(b"%PDF")
