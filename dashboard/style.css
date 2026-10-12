@@ -79,3 +79,7 @@ footer{padding:18px 0 4px;color:#526076;font-size:11px}
 @media(max-width:850px){.intel-grid{grid-template-columns:1fr}.investigation-stats.compact{grid-template-columns:repeat(2,1fr)}}
 
 .kpi-note{display:block;margin-top:5px;color:#52647c;font-size:10px;font-style:normal}.risk-explainer{margin-bottom:12px;padding:11px 13px;border:1px solid #23344d;background:#0a1019;border-radius:8px;color:#7f8da3;font-size:11px;line-height:1.5}.risk-explainer strong{color:#b9c9e3}
+
+.secondary{background:#141e2d;border:1px solid #2a3a55;color:#c9d6ee;padding:10px 16px;border-radius:8px;cursor:pointer;font-weight:800}
+.secondary:hover:not(:disabled){background:#1b2a42;border-color:#4d6fb4}
+.secondary:disabled,.primary:disabled{opacity:.5;cursor:not-allowed}

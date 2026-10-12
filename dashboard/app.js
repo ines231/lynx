@@ -112,6 +112,48 @@ function showError(err) {
   $("serviceBadge").className = "status-chip danger";
 }
 
+let currentAnalysisId = null;
+
+function setPdfState(label, disabled) {
+  const btn = $("pdfBtn");
+  btn.textContent = label;
+  btn.disabled = disabled;
+}
+
+async function downloadReport() {
+  if (!currentAnalysisId) return;
+  setPdfState("Génération du PDF…", true);
+
+  try {
+    const r = await fetch(`${API}/api/risk/report.pdf?analysis_id=${encodeURIComponent(currentAnalysisId)}`);
+
+    if (r.status === 410) {
+      throw new Error("Analyse expirée (serveur redémarré) : cliquez sur Actualiser puis réessayez.");
+    }
+    if (!r.ok) throw new Error(`${r.status} ${r.statusText}`);
+
+    const blob = await r.blob();
+    const name = /filename="([^"]+)"/.exec(r.headers.get("Content-Disposition") || "")?.[1]
+      || `lynx-rapport-${currentAnalysisId}.pdf`;
+
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = name;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 10000);
+  } catch (err) {
+    console.error(err);
+    const box = $("errorBox");
+    box.classList.remove("hidden");
+    box.textContent = "Impossible de générer le rapport : " + err.message;
+  } finally {
+    setPdfState("⤓ Rapport PDF", !currentAnalysisId);
+  }
+}
+
 async function load() {
   $("errorBox").classList.add("hidden");
   $("serviceBadge").textContent = "Analyse en cours…";
@@ -125,6 +167,9 @@ async function load() {
       get("/api/investigations/full-demo"),
       get("/api/events/attack-scenario")
     ]);
+
+    currentAnalysisId = risk.analysis_id || null;
+    setPdfState("⤓ Rapport PDF", !currentAnalysisId);
 
     const rows = risk.event_risks || [];
     const highest = [...rows].sort((a,b) =>
@@ -217,4 +262,5 @@ function renderInvestigationTimeline(timeline) {
 }
 
 $("refreshBtn").addEventListener("click", load);
+$("pdfBtn").addEventListener("click", downloadReport);
 load();
