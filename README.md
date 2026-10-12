@@ -1,104 +1,203 @@
-# Probabilistic Threat Hunting Platform
+# LYNX : Probabilistic Threat Hunting Platform
 
-This project is a threat hunting platform focused on risk probability, not simple alert labels.
+Plateforme de *threat hunting* qui raisonne en **probabilités et en risque financier** plutôt qu'avec de simples étiquettes « faible / moyen / élevé ».
 
-Instead of only showing low, medium, or high, the goal is to estimate:
+Pour chaque événement de sécurité, LYNX estime :
 
-- how unusual an event is compared to normal behavior
-- how likely it is to be malicious
-- what business risk it may create
-- whether the risk should be remediated, accepted, transferred, or handled with compensating controls
-
-The platform combines statistical analysis, machine learning, threat intelligence, kill chain correlation, and FAIR-style risk thinking.
-
-## Main Idea
-
-Traditional SOC tools often work like this:
+- à quel point il s'écarte du comportement normal (baseline) ;
+- quelle perte annuelle il peut représenter (modèle FAIR, simulation de Monte Carlo) ;
+- quel traitement appliquer (remédier, atténuer, transférer, accepter) ;
+- à quelle étape de la *kill chain* il appartient et quelles techniques MITRE ATT&CK il mobilise.
 
 ```
-event -> rule -> score -> severity badge
+événement -> comparaison à la baseline -> probabilité d'anomalie -> perte annuelle (ALE, VaR) -> traitement
 ```
 
-This platform is designed to work more like this:
+> **État du projet.** Les données d'entrée viennent de **connecteurs simulés** (Wazuh et IntelOwl factices). Les chiffres illustrent la méthode ; ils ne décrivent pas une organisation réelle. Voir [Limites](#limites-et-état-réel).
+
+## Sommaire
+
+1. [Architecture](#architecture)
+2. [Installation et lancement](#installation-et-lancement)
+3. [API](#api)
+4. [Méthode](#méthode)
+5. [Résultats](#résultats)
+6. [Rapport PDF](#rapport-pdf)
+7. [Tests](#tests)
+8. [Limites et état réel](#limites-et-état-réel)
+
+## Architecture
 
 ```
-event -> baseline comparison -> anomaly probability -> risk estimate -> treatment recommendation
+ai_service/
+  app/
+    main.py                 application FastAPI + dashboard statique
+    api/                    routes : events, anomalies, investigations, risk
+  connectors/
+    wazuh/mock_wazuh.py     générateur d'événements et de scénario d'attaque (simulé)
+    intelowl/               enrichissement threat intel (simulé)
+    models/event.py         modèles Pydantic des événements
+  enrichment/               enrichissement des IP, domaines et hashes
+  ml/
+    baselines/              construction de la baseline utilisateur
+    features/               extraction de caractéristiques
+    anomaly/                Isolation Forest (détection binaire)
+  risk/
+    pipeline.py             pipeline complet, partagé par l'API et le PDF
+    baseline_model.py       profil de comportement normal
+    anomaly_probability.py  probabilité d'anomalie continue par événement
+    chi_square_tests.py     test du chi-carré (événements, processus, ports, sévérités)
+    monte_carlo_fair.py     quantification FAIR : ALE, VaR 95 % / 99 %
+    risk_treatment.py       stratégie, priorité, contrôles recommandés
+  correlation/kill_chain.py corrélation des événements sur la kill chain
+  hypotheses/               hypothèses de chasse et requêtes suggérées
+  reports/
+    investigation_report.py rapport d'investigation (IOC, MITRE, chronologie)
+    pdf_report.py           rapport PDF structuré
+dashboard/                  interface web (HTML, CSS, JavaScript)
+config/settings.py          paramètres (variables d'environnement ou config/.env)
+tests/                      tests unitaires et d'intégration
 ```
 
-Example:
+## Installation et lancement
 
-- **Anomaly probability:** 68%
-- **Estimated annual loss exposure:** $22,650
-- **Recommended action:** remediate within 48 hours
+Prérequis : Python 3.12 (version utilisée sur la VM de développement).
 
-## What It Does
-
-- Builds behavioral baselines for users, systems, processes, ports, and activity time.
-- Detects unusual activity using statistics and ML models.
-- Uses probabilities instead of fixed rule-only scoring.
-- Correlates events across attack stages such as reconnaissance, persistence, lateral movement, and exfiltration.
-- Enriches IPs, domains, and hashes with threat intelligence.
-- Estimates risk using FAIR-style concepts and Monte Carlo simulation.
-- Produces investigation summaries, IOCs, MITRE ATT&CK context, and recommended actions.
-
-## Core Structure
-
-```
-services/
-  ai_service/
-    app/
-      enrichment/     threat intelligence
-      features/       event feature extraction
-      models/         anomaly detection
-      correlation/    kill chain logic
-      reports/        investigation reports
-      llm/            optional Ollama narrative layer
+```bash
+git clone https://github.com/ines231/lynx.git
+cd lynx
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
 ```
 
-Ollama is **not** the detection engine. It is only used at the end to help write investigation narratives from structured evidence.
+Lancer l'API depuis la racine du dépôt :
 
-## Risk Engine Direction
+```bash
+uvicorn ai_service.app.main:app --reload --host 0.0.0.0 --port 8000
+```
 
-The risk engine is being designed around:
+| Adresse | Contenu |
+| --- | --- |
+| `http://localhost:8000/dashboard-ui` | dashboard analyste |
+| `http://localhost:8000/docs` | documentation interactive de l'API (Swagger) |
+| `http://localhost:8000/health` | état du service |
 
-- normal distribution and z-score analysis
-- chi-square tests for behavior changes
-- Isolation Forest for multivariable anomaly detection
-- LSTM models for temporal behavior
-- Monte Carlo simulation for FAIR-style risk quantification
+Les paramètres (port, seuils, clés d'API de threat intelligence) se règlent par variables d'environnement ou dans un fichier `config/.env` à créer (optionnel, ignoré par git). Les valeurs par défaut sont dans `config/settings.py`.
 
-The intended result is a quantified risk view, not a vague severity label.
+## API
 
-## Dashboard Goal
+| Méthode | Route | Rôle |
+| --- | --- | --- |
+| GET | `/api/risk/analyze` | analyse complète ; renvoie un `analysis_id`. Paramètres : `normal_count`, `seed` (résultats reproductibles) |
+| GET | `/api/risk/report.pdf` | rapport PDF. `analysis_id` : PDF de l'analyse affichée (410 si expirée) ; sans identifiant : nouvelle analyse |
+| GET | `/api/risk/demo` | démonstration du moteur de risque de bout en bout |
+| GET | `/api/events/sample`, `/attack-scenario` | événements simulés |
+| POST | `/api/events/enrich`, `/enrich-batch`, `/ingest` | enrichissement et ingestion |
+| GET / POST | `/api/anomalies/status`, `/train`, `/detect`, `/detect-batch`, `/demo` | détection par Isolation Forest |
+| GET / POST | `/api/investigations/full-demo`, `/analyze-events` | corrélation, rapports et hypothèses |
 
-The dashboard should help an analyst quickly answer:
+Exemple reproductible :
 
-- What happened?
-- How abnormal is it?
-- What is the probability of malicious behavior?
-- Which attack stages are involved?
-- What is the estimated business risk?
-- What should we do next?
+```bash
+curl "http://localhost:8000/api/risk/analyze?seed=7"
+curl -o rapport.pdf "http://localhost:8000/api/risk/report.pdf?seed=7"
+```
 
-Planned views:
+## Méthode
 
-- anomaly probability feed
-- kill chain timeline
-- threat intelligence lookup
-- risk simulation panel
-- investigation report preview
-- treatment recommendation view
+**Baseline.** Un profil de comportement normal est construit sur des événements de référence (heures, processus, ports, types d'événements, sévérités). La baseline ne contient que des types d'événements normaux (connexions, exécutions de processus, accès fichiers, connexions réseau, requêtes DNS), sinon les attaques « normaliseraient » la référence.
 
-## Current Status
+**Probabilité d'anomalie.** Chaque événement reçoit une probabilité continue qui combine l'écart temporel, l'écart de processus, l'écart réseau et la rareté de son type. Elle sert à hiérarchiser les événements. La décision binaire « anomalie ou non » reste celle de l'Isolation Forest.
 
-The project is in active development.
+**Test du chi-carré.** Il compare la distribution des types d'événements de la fenêtre d'attaque à celle de la baseline.
 
-Current focus:
+- H0 : la fenêtre provient de la distribution de la baseline. Seuil de décision : α = 0,05.
+- Les effectifs de la baseline sont lissés (Lidstone) : un type jamais vu garde une probabilité faible mais non nulle.
+- Statistique de Pearson `X² = Σ (O − E)² / E` sur l'union des catégories, avec `ddl = K − 1`.
+- Si tous les effectifs attendus sont ≥ 5, la p-value suit la loi du chi-carré (méthode *asymptotique*). Sinon elle est estimée par un **test multinomial exact par simulation de Monte-Carlo** (10 000 tirages), valable sur les petites fenêtres typiques d'un SOC. La plus petite p-value possible vaut alors 1/10 001, affichée « < 0,0001 ».
+- Le score `1 − p` mesure la **force de la preuve contre H0**. Ce n'est pas une probabilité calibrée d'attaque.
+- Une version antérieure renvoyait la p-value brute quand le test n'était pas significatif, ce qui inversait le sens du score ; c'est corrigé.
 
-- AI service foundation
-- probabilistic risk engine
-- threat intelligence interfaces
-- kill chain correlation
-- dashboard visualization
+**Quantification FAIR.** La fréquence d'événement de menace et la vulnérabilité donnent la fréquence d'événement de perte. Elle est combinée à l'amplitude de perte probable dans une simulation de Monte Carlo, ce qui donne la **perte annuelle attendue (ALE)**, la **valeur à risque** à 95 % et 99 %, et l'*expected shortfall*.
 
-**Next major step:** build the dashboard around probability, FAIR-style risk, and investigation workflow.
+**Traitement du risque.** Selon l'ALE et le contexte, le moteur propose une stratégie (remédiation urgente, atténuation, transfert, acceptation, surveillance), une priorité, un délai et des contrôles.
+
+**Kill chain et investigation.** Les événements sont classés par étape (reconnaissance, exploitation, persistence, mouvement latéral, exfiltration), chaînés par continuité de source et de destination, puis rattachés aux techniques MITRE ATT&CK. Des hypothèses de chasse avec requêtes suggérées en sont déduites.
+
+## Résultats
+
+Analyse reproductible : `GET /api/risk/analyze?seed=7` (baseline de 30 événements normaux, scénario d'attaque de 7 événements).
+
+**Test du chi-carré sur le scénario**
+
+| Indicateur | Valeur |
+| --- | --- |
+| Statistique X² | 112,18 |
+| Degrés de liberté | 8 |
+| p-value | < 0,0001 (1/10 001 au minimum) |
+| Méthode | Monte-Carlo (effectif attendu minimum 0,10 < 5) |
+| Taille d'effet (w de Cohen) | 4,00 |
+| Décision | H0 rejetée : écart significatif avec la baseline |
+
+Les types `port_scan`, `privilege_escalation`, `service_installation` et `lateral_movement` n'existent pas dans la baseline : ce sont eux qui font rejeter H0.
+
+**Risque par événement**
+
+| # | Événement | Utilisateur | Anomalie | ALE | VaR 95 % | VaR 99 % | Priorité |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 | port_scan | n/a | 45,2 % | 145 $ | 8 176 $ | 10 517 $ | INFO |
+| 2 | port_scan | n/a | 45,2 % | 145 $ | 8 176 $ | 10 517 $ | INFO |
+| 3 | port_scan | n/a | 45,2 % | 259 $ | 8 295 $ | 12 173 $ | INFO |
+| 4 | privilege_escalation | user1 | 35,2 % | 2 133 $ | 52 894 $ | 71 718 $ | INFO |
+| 5 | service_installation | admin | 37,7 % | 617 $ | 33 768 $ | 41 885 $ | INFO |
+| 6 | lateral_movement | admin | 57,7 % | 4 529 $ | 52 316 $ | 69 264 $ | INFO |
+| 7 | file_access | service_account | 32,6 % | 5 847 $ | 246 068 $ | 365 547 $ | **CRITICAL** |
+
+L'événement le plus exposé est l'accès à un fichier sensible (`C:\Data\Financial\reports.xlsx`) par un compte de service : **remédiation urgente, délai inférieur à 4 heures**, avec pour objectif une ALE ramenée de 5 847 $ à 877 $ (−85 %).
+
+**Corrélation.** Une attaque reconstituée (gravité *high*, confiance 78,6 %, source 192.168.1.50), 4 étapes sur 5 de la kill chain observées, 3 techniques MITRE (T1046, T1548, T1570), 8 hypothèses de chasse.
+
+## Rapport PDF
+
+Le bouton **« Rapport PDF »** du dashboard télécharge le rapport de l'analyse affichée (même `analysis_id`, donc mêmes chiffres). Il contient :
+
+1. synthèse exécutive ;
+2. méthodologie ;
+3. test du chi-carré (statistique, p-value, méthode, distribution observée et baseline) ;
+4. risque par événement, avec graphiques ;
+5. plan de traitement ;
+6. kill chain ;
+7. investigation (IOC, MITRE ATT&CK, chronologie) ;
+8. hypothèses de chasse ;
+9. recommandations et prochaines étapes ;
+10. limites et lecture critique.
+
+Une analyse reste en mémoire tant que le serveur tourne (32 analyses au maximum). Après un redémarrage, le bouton demande d'actualiser le dashboard.
+
+## Tests
+
+```bash
+pip install -r requirements.txt
+pytest -q
+```
+
+45 tests : 36 unitaires (baseline, chi-carré, probabilités d'anomalie, FAIR, traitement du risque, pipeline, PDF) et 9 d'intégration de l'API. Les tests du chi-carré vérifient notamment qu'une fenêtre normale obtient un score faible, qu'une fenêtre d'attaque avec des types inconnus est significative, que le score croît avec l'écart à la baseline, que la méthode asymptotique coïncide avec `scipy` et que le résultat est déterministe.
+
+## Limites et état réel
+
+- **Données simulées.** Wazuh et IntelOwl sont remplacés par des générateurs (`mock_wazuh`, `mock_intelowl`). Aucun flux de production n'est branché.
+- **Échantillon réduit.** La baseline compte 30 événements et la fenêtre testée 7 : la puissance statistique est limitée, d'où la p-value estimée par simulation.
+- **Paramètres FAIR non calibrés.** Fréquences, vulnérabilité et amplitude de perte sont des valeurs par défaut. L'ALE et la VaR donnent un ordre de grandeur pour prioriser, pas un budget.
+- **Seuils de priorité.** La priorité dépend de seuils sur l'ALE : dans l'exemple ci-dessus, l'escalade de privilèges et le mouvement latéral restent classés « INFO / acceptation » alors qu'ils appartiennent à une attaque en cours. À corriger en tenant compte de l'étape de la kill chain.
+- **Pas de LSTM ni de couche Ollama.** Ces pistes figuraient dans la première version du projet : le dossier `ai_service/llm/` est vide et `tensorflow` et `ollama` sont listés dans `requirements.txt` sans être utilisés par le code. L'analyse repose sur la baseline statistique, le chi-carré, l'Isolation Forest et FAIR.
+- **Code dupliqué.** `ai_service/anomaly/` et `ai_service/features/` doublonnent `ai_service/ml/` et ne sont importés nulle part.
+- **Avertissements.** Des appels à `datetime.utcnow()` (obsolète depuis Python 3.12) génèrent des `DeprecationWarning` sans conséquence fonctionnelle.
+
+## Pistes d'évolution
+
+- brancher un vrai flux Wazuh et un vrai fournisseur de threat intelligence ;
+- calibrer les paramètres FAIR sur le contexte métier de l'organisation ;
+- tenir compte de l'étape de la kill chain dans la priorité ;
+- historiser les analyses dans une base de données plutôt qu'en mémoire ;
+- ajouter un modèle temporel (LSTM) et une couche de narration par LLM, une fois les bases ci-dessus stabilisées.
