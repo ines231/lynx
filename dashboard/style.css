@@ -83,3 +83,14 @@ footer{padding:18px 0 4px;color:#526076;font-size:11px}
 .secondary{background:#141e2d;border:1px solid #2a3a55;color:#c9d6ee;padding:10px 16px;border-radius:8px;cursor:pointer;font-weight:800}
 .secondary:hover:not(:disabled){background:#1b2a42;border-color:#4d6fb4}
 .secondary:disabled,.primary:disabled{opacity:.5;cursor:not-allowed}
+
+.chi-panel{margin-top:12px;padding:14px 16px;background:#0a1019;border:1px solid #1c2939;border-radius:9px}
+.chi-head{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:12px;font-size:13px}
+.chi-verdict{font-size:10px;font-weight:900;padding:4px 8px;border-radius:12px;background:#182233;color:#b9c7da;white-space:nowrap}
+.chi-verdict.alert{background:#351d22;color:#ff9696}.chi-verdict.ok{background:#172b25;color:#7fe0ae}
+.chi-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+.chi-grid span{display:block;color:#7f8ca0;font-size:11px}
+.chi-grid strong{display:block;font-size:14px;margin-top:5px;color:#e1e8f4}
+.chi-note{margin:12px 0 0;color:#8a98ad;font-size:11px;line-height:1.55}
+@media(max-width:650px){.chi-grid{grid-template-columns:1fr 1fr}}
+

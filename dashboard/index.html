@@ -50,10 +50,24 @@
           <div><h2>Risk intelligence</h2><p>Le risque est évalué événement par événement.</p></div>
           <span class="badge" id="riskPriority">—</span>
         </div>
-        <div class="risk-explainer">Le modèle ML décide si un événement est une anomalie. Le moteur de risque conserve une <strong>probabilité continue</strong> pour prioriser les événements.</div>\n        <div class="risk-highlight">
+        <div class="risk-explainer">Le modèle ML décide si un événement est une anomalie. Le moteur de risque conserve une <strong>probabilité continue</strong> pour prioriser les événements.</div>
+        <div class="risk-highlight">
           <div><span>Probabilité d'anomalie</span><strong id="riskProbability">—</strong></div>
-          <div><span>Chi-square</span><strong id="riskChiSquare">—</strong></div>
+          <div><span>p-value du test χ²</span><strong id="riskChiSquare">—</strong></div>
           <div><span>Stratégie</span><strong id="riskStrategy">—</strong></div>
+        </div>
+        <div class="chi-panel" id="chiPanel">
+          <div class="chi-head">
+            <strong>Test du chi² sur le scénario</strong>
+            <span id="chiDecision" class="chi-verdict">—</span>
+          </div>
+          <div class="chi-grid">
+            <div><span>Statistique χ²</span><strong id="chiStat">—</strong></div>
+            <div><span>Degrés de liberté</span><strong id="chiDf">—</strong></div>
+            <div><span>p-value</span><strong id="chiP">—</strong></div>
+            <div><span>Méthode</span><strong id="chiMethod">—</strong></div>
+          </div>
+          <p id="chiNote" class="chi-note">—</p>
         </div>
         <div class="metric-pair">
           <div><span>VaR 95%</span><strong id="riskVar95">—</strong></div>
@@ -79,7 +93,7 @@
       </div>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>Événement</th><th>Utilisateur</th><th>Anomalie</th><th>Chi² scénario</th><th>ALE</th><th>Priorité</th><th>Traitement</th></tr></thead>
+          <thead><tr><th>Événement</th><th>Utilisateur</th><th>Anomalie</th><th title="p-value du test du chi² sur tout le scénario (identique pour chaque ligne)">p-value χ²</th><th>ALE</th><th>Priorité</th><th>Traitement</th></tr></thead>
           <tbody id="riskTable"><tr><td colspan="7" class="empty">Chargement…</td></tr></tbody>
         </table>
       </div>

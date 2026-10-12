@@ -9,6 +9,16 @@ const pct = (v) => typeof v === "number"
   ? (v * 100).toFixed(1) + "%"
   : (v ?? "—");
 
+// p-values: never show 0 -- the Monte-Carlo test cannot go below 1/(n_simulations+1)
+const fmtP = (v) => typeof v !== "number" ? "—"
+  : (v < 0.0001 ? "< 0.0001" : v.toFixed(4));
+
+const METHOD_LABELS = {
+  asymptotic: "Asymptotique (loi du χ²)",
+  monte_carlo: "Monte-Carlo (test exact)",
+  degenerate: "Dégénérée"
+};
+
 const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({
   "&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"
 }[c]));
@@ -51,7 +61,45 @@ function renderBars(rows) {
   }).join("") || '<div class="empty">Aucune mesure disponible.</div>';
 }
 
-function renderRows(rows) {
+function chiTitle(row, chi) {
+  const score = typeof row.chi_square_probability === "number"
+    ? ` · score 1 − p = ${pct(row.chi_square_probability)}` : "";
+  return `p-value du scénario complet (${METHOD_LABELS[chi?.method] || "méthode inconnue"})${score}`;
+}
+
+function renderChi(chi) {
+  const ok = chi && typeof chi.p_value === "number";
+  $("chiStat").textContent = ok ? Number(chi.chi2_statistic).toFixed(2) : "—";
+  $("chiDf").textContent = ok ? chi.degrees_of_freedom : "—";
+  $("chiP").textContent = fmtP(chi?.p_value);
+  $("riskChiSquare").textContent = fmtP(chi?.p_value);
+  $("chiMethod").textContent = METHOD_LABELS[chi?.method] || "—";
+
+  const verdict = $("chiDecision");
+  if (!ok) {
+    verdict.textContent = "Test indisponible";
+    verdict.className = "chi-verdict";
+    $("chiNote").textContent = "Le test n'a pas pu être calculé (données ou baseline insuffisantes).";
+    return;
+  }
+
+  verdict.textContent = chi.is_significant ? "H0 rejetée — écart significatif" : "H0 non rejetée";
+  verdict.className = "chi-verdict " + (chi.is_significant ? "alert" : "ok");
+
+  const parts = [
+    `H0 : le scénario suit la distribution de la baseline (seuil α = ${chi.p_value_threshold}).`
+  ];
+  if (chi.new_categories?.length) {
+    parts.push(`Types jamais vus dans la baseline : ${chi.new_categories.join(", ")}.`);
+  }
+  if (chi.method === "monte_carlo") {
+    parts.push(`Effectifs attendus faibles (min. ${Number(chi.min_expected_count).toFixed(2)}) : p-value estimée par simulation, donc jamais inférieure à 1/10 001.`);
+  }
+  parts.push("Le score « 1 − p » mesure la preuve contre H0, ce n'est pas une probabilité d'attaque.");
+  $("chiNote").textContent = parts.join(" ");
+}
+
+function renderRows(rows, chi) {
   const body = $("riskTable");
   if (!rows.length) {
     body.innerHTML = '<tr><td colspan="7" class="empty">Aucun événement retourné.</td></tr>';
@@ -61,7 +109,7 @@ function renderRows(rows) {
     <td><strong>${esc(x.event)}</strong></td>
     <td>${esc(x.user || "—")}</td>
     <td>${pct(x.anomaly_probability)}</td>
-    <td>${pct(x.chi_square_probability)}</td>
+    <td title="${esc(chiTitle(x, chi))}">${fmtP(chi?.p_value)}</td>
     <td>${money(x.annual_loss_expectancy)}</td>
     <td><span class="priority ${priorityClass(x.priority)}">${esc(x.priority || "—")}</span></td>
     <td>${esc(x.strategy || "—")}</td>
@@ -195,13 +243,13 @@ async function load() {
 
     $("riskPriority").textContent = highest?.priority || "—";
     $("riskProbability").textContent = pct(highest?.anomaly_probability);
-    $("riskChiSquare").textContent = pct(highest?.chi_square_probability);
+    renderChi(risk.chi_square);
     $("riskStrategy").textContent = highest?.strategy || "—";
     $("riskVar95").textContent = money(highest?.value_at_risk_95);
     $("riskVar99").textContent = money(highest?.value_at_risk_99);
 
     renderBars(rows);
-    renderRows(rows);
+    renderRows(rows, risk.chi_square);
     renderKillChain(stages);
 
     $("chainSummary").textContent = stages.length + "/5 étapes observées";
