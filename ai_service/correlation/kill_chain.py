@@ -84,6 +84,10 @@ class KillChainCorrelation:
             event.get("event_type", "")
         ).lower()
 
+        # 1. The declared event type is the most reliable signal: check it for
+        #    every stage BEFORE looking at free-text keywords. (Keywords such as
+        #    "run" or "task" match almost any event dump, which used to classify
+        #    a file_access event as "persistence" and hid the exfiltration stage.)
         for stage, rules in self.STAGE_RULES.items():
             if any(
                 event_type_name in event_type
@@ -91,6 +95,8 @@ class KillChainCorrelation:
             ):
                 return stage
 
+        # 2. Otherwise fall back to keywords.
+        for stage, rules in self.STAGE_RULES.items():
             if any(
                 keyword in event_str
                 for keyword in rules["keywords"]

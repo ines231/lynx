@@ -4,13 +4,14 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>LYNX — Probabilistic Threat Hunting</title>
+  <link rel="icon" type="image/png" href="/dashboard/assets/lynx-logo.png">
   <link rel="stylesheet" href="/dashboard/style.css">
 </head>
 <body>
 <div class="shell">
   <aside class="sidebar">
     <div class="brand">
-      <span class="brand-mark">L</span>
+      <img class="brand-logo" src="/dashboard/assets/lynx-logo.png" alt="Logo LYNX">
       <div><strong>LYNX</strong><small>Threat Hunting</small></div>
     </div>
     <nav>
@@ -41,7 +42,7 @@
       <article class="card kpi"><span>Événements d'attaque</span><strong id="kpiEvents">—</strong><small>Scénario analysé</small></article>
       <article class="card kpi"><span>Anomalies ML détectées</span><strong id="kpiAnomalies">—</strong><small id="anomalyRate">—</small><em class="kpi-note">Détection binaire du modèle</em></article>
       <article class="card kpi"><span>Attaques corrélées</span><strong id="kpiAttacks">—</strong><small id="kpiReports">—</small></article>
-      <article class="card kpi risk-kpi"><span>Exposition annuelle max.</span><strong id="kpiALE">—</strong><small>Annual Loss Expectancy</small></article>
+      <article class="card kpi risk-kpi"><span>Exposition annuelle max.</span><strong id="kpiALE">—</strong><small id="kpiALEnote">Annual Loss Expectancy</small></article>
     </section>
 
     <section class="grid two">
@@ -144,6 +145,7 @@
         <div>
           <h3>Techniques MITRE ATT&amp;CK</h3>
           <div id="mitreList" class="tags"></div>
+          <p id="mitreSource" class="muted mitre-source"></p>
         </div>
       </div>
       <div class="facts">

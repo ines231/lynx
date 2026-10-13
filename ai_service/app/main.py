@@ -10,7 +10,9 @@ import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 
 from config.settings import settings
-from ai_service.app.api import events, anomalies, investigations, risk
+from ai_service.app.api import events, anomalies, investigations, risk, mitre
+from ai_service.mitre.knowledge_base import mitre_kb
+import threading
 
 logging.basicConfig(
     level=settings.log_level,
@@ -23,6 +25,11 @@ async def lifespan(app: FastAPI):
     logger.info("🚀 Threat Hunting AI Service Starting...")
     logger.info(f"Environment: {settings.env}")
     logger.info(f"API running on http://{settings.api_host}:{settings.api_port}")
+
+    # MITRE ATT&CK: load the local cache now (instant) and refresh it in the
+    # background if it is missing or stale, so startup is never blocked.
+    mitre_kb.load_cache()
+    threading.Thread(target=mitre_kb.ensure_fresh, name="mitre-update", daemon=True).start()
     yield
     logger.info("🛑 Threat Hunting AI Service Shutting Down...")
 
@@ -45,6 +52,7 @@ app.include_router(events.router)
 app.include_router(anomalies.router)
 app.include_router(investigations.router)
 app.include_router(risk.router)
+app.include_router(mitre.router)
 
 # Integrated analyst dashboard
 DASHBOARD_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "dashboard"))
@@ -67,7 +75,8 @@ async def root():
             "events": "/api/events",
             "anomalies": "/api/anomalies",
             "investigations": "/api/investigations",
-            "risk": "/api/risk"
+            "risk": "/api/risk",
+            "mitre": "/api/mitre"
         }
     }
 

@@ -8,6 +8,7 @@ from ai_service.risk.anomaly_probability import anomaly_probability
 from ai_service.risk.chi_square_tests import chi_square_tests
 from ai_service.risk.monte_carlo_fair import monte_carlo_fair
 from ai_service.risk.risk_treatment import risk_treatment
+from ai_service.risk.currency import get_display_currency
 from ai_service.risk.pipeline import (
     NORMAL_EVENT_TYPES,
     analysis_store,
@@ -30,6 +31,13 @@ router = APIRouter(
     prefix="/api/risk",
     tags=["risk"]
 )
+
+
+def _format_amount(amount, currency):
+    """Format an amount already in the display currency, e.g. '17 497,32 DT'."""
+    value = float(amount)
+    text = f"{value:,.2f}".replace(",", "\u00a0").replace(".", ",")
+    return f"{text}\u00a0{currency.symbol}"
 
 
 @router.get("/")
@@ -72,6 +80,8 @@ async def risk_engine_demo():
 
     try:
         logger.info("=== RISK ENGINE DEMO START ===")
+
+        currency = get_display_currency()
 
         # =========================================================
         # STEP 1 - BUILD BASELINE
@@ -182,25 +192,16 @@ async def risk_engine_demo():
                     anomaly_prob
                 ),
 
-                "annual_loss_expectancy": float(
-                    risk_metrics.get(
-                        "annual_loss_expectancy",
-                        0
-                    )
+                "annual_loss_expectancy": currency.convert(
+                    risk_metrics.get("annual_loss_expectancy", 0)
                 ),
 
-                "value_at_risk_95": float(
-                    risk_metrics.get(
-                        "value_at_risk_95",
-                        0
-                    )
+                "value_at_risk_95": currency.convert(
+                    risk_metrics.get("value_at_risk_95", 0)
                 ),
 
-                "value_at_risk_99": float(
-                    risk_metrics.get(
-                        "value_at_risk_99",
-                        0
-                    )
+                "value_at_risk_99": currency.convert(
+                    risk_metrics.get("value_at_risk_99", 0)
                 ),
 
                 "priority": treatment.get(
@@ -280,6 +281,8 @@ async def risk_engine_demo():
             "status": "success",
             "demo_complete": True,
 
+            "currency": currency.to_dict(),
+
             "summary": {
                 "baseline_events": len(
                     enriched_normal
@@ -315,15 +318,15 @@ async def risk_engine_demo():
                     ),
 
                     "annual_loss_expectancy": (
-                        f"${highest_risk['event']['annual_loss_expectancy']:,.2f}"
+                        _format_amount(highest_risk['event']['annual_loss_expectancy'], currency)
                     ),
 
                     "value_at_risk_95": (
-                        f"${highest_risk['event']['value_at_risk_95']:,.2f}"
+                        _format_amount(highest_risk['event']['value_at_risk_95'], currency)
                     ),
 
                     "value_at_risk_99": (
-                        f"${highest_risk['event']['value_at_risk_99']:,.2f}"
+                        _format_amount(highest_risk['event']['value_at_risk_99'], currency)
                     ),
 
                     "priority": highest_risk[

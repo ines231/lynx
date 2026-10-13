@@ -1,8 +1,12 @@
 const API = window.location.origin;
 const $ = (id) => document.getElementById(id);
 
+// Amounts come from the API already converted into the display currency
+// (TND by default); the symbol is set from the response in load().
+let currencySymbol = "DT";
+
 const money = (v) => typeof v === "number"
-  ? "$" + v.toLocaleString(undefined, { maximumFractionDigits: 0 })
+  ? v.toLocaleString("fr-FR", { maximumFractionDigits: 0 }) + "\u00a0" + currencySymbol
   : (v ?? "—");
 
 const pct = (v) => typeof v === "number"
@@ -147,9 +151,32 @@ function renderIocs(report) {
 }
 
 function renderTechniques(techniques) {
-  $("mitreList").innerHTML = (techniques?.length ? techniques : [])
-    .map(t => `<span class="tag"><b>${esc(t.technique_id)}</b> ${esc(t.description)}</span>`).join("")
-    || '<span class="muted">Aucune technique MITRE corrélée.</span>';
+  const list = techniques?.length ? techniques : [];
+
+  $("mitreList").innerHTML = list.map(t => {
+    const name = t.name || t.description || "";
+    const tactics = (t.tactics || []).join(", ");
+    const terms = (t.matched_terms || []).join(", ");
+    const tip = [
+      tactics && `Tactique(s) ATT&CK : ${tactics}`,
+      t.score != null && `Pertinence : ${t.score}`,
+      terms && `Termes correspondants : ${terms}`,
+      t.source
+    ].filter(Boolean).join(" · ");
+
+    // only link to the official ATT&CK site
+    const href = /^https:\/\/attack\.mitre\.org\//.test(t.url || "") ? t.url : null;
+    const inner = `<b>${esc(t.technique_id)}</b> ${esc(name)}${tactics ? ` <em>${esc(tactics)}</em>` : ""}`;
+
+    return href
+      ? `<a class="tag" href="${esc(href)}" target="_blank" rel="noopener noreferrer" title="${esc(tip)}">${inner}</a>`
+      : `<span class="tag" title="${esc(tip)}">${inner}</span>`;
+  }).join("") || '<span class="muted">Aucune technique MITRE corrélée.</span>';
+
+  const source = list[0]?.source;
+  $("mitreSource").textContent = source
+    ? `Source : ${source} · correspondance automatique par recherche dans le catalogue officiel (survol : tactique, pertinence, termes).`
+    : "";
 }
 
 function showError(err) {
@@ -216,6 +243,7 @@ async function load() {
       get("/api/events/attack-scenario")
     ]);
 
+    currencySymbol = risk.currency?.symbol || "DT";
     currentAnalysisId = risk.analysis_id || null;
     setPdfState("⤓ Rapport PDF", !currentAnalysisId);
 
@@ -240,6 +268,10 @@ async function load() {
     $("kpiAttacks").textContent = risk.summary?.attacks_found ?? 0;
     $("kpiReports").textContent = (risk.summary?.reports_generated ?? 0) + " rapport(s) généré(s)";
     $("kpiALE").textContent = money(highest?.annual_loss_expectancy);
+    if (risk.currency && risk.currency.code !== "USD") {
+      $("kpiALEnote").textContent =
+        `Annual Loss Expectancy · 1 USD = ${Number(risk.currency.rate_from_usd).toFixed(4)} ${risk.currency.symbol}`;
+    }
 
     $("riskPriority").textContent = highest?.priority || "—";
     $("riskProbability").textContent = pct(highest?.anomaly_probability);
@@ -300,7 +332,8 @@ function renderInvestigationTimeline(timeline) {
     .map(t => {
       const actor = t.user && t.user !== "None" ? t.user : "—";
       const host = t.hostname || t.host || "—";
-      const description = t.description || `${t.event_type || "Événement"} · ${actor} · ${host}`;
+      const description = (t.description || `${t.event_type || "Événement"} · ${actor} · ${host}`)
+        .replace(" by None", "");
       return `<div class="timeline-item">
         <span class="timeline-seq">#${t.sequence}</span>
         <div><strong>${esc(t.event_type)}</strong><small>${esc(formatTimestamp(t.timestamp))} · ${esc(description)}</small></div>

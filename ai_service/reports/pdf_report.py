@@ -21,8 +21,10 @@ text goes through ``_clean`` which keeps the characters Helvetica can draw
 emoji, Greek letters).
 """
 
+import contextvars
 import io
 import logging
+import os
 from datetime import datetime
 from typing import Any, Dict, Iterable, List, Optional, Sequence
 from xml.sax.saxutils import escape
@@ -36,6 +38,7 @@ from reportlab.lib.units import cm
 from reportlab.pdfgen import canvas
 from reportlab.platypus import (
     CondPageBreak,
+    Image,
     KeepTogether,
     Paragraph,
     SimpleDocTemplate,
@@ -44,6 +47,7 @@ from reportlab.platypus import (
     TableStyle,
 )
 
+from ai_service.mitre.knowledge_base import mitre_kb
 from ai_service.risk.chi_square_tests import chi_square_tests
 
 logger = logging.getLogger(__name__)
@@ -122,9 +126,12 @@ def _num(value: Any, decimals: int = 0) -> str:
     return text.replace(",", " ").replace(".", ",")
 
 
+_CURRENCY_SYMBOL = contextvars.ContextVar("lynx_currency_symbol", default="DT")
+
+
 def _money(value: Any) -> str:
     text = _num(value, 0)
-    return text if text == "-" else f"{text} $"
+    return text if text == "-" else f"{text}\u00a0{_CURRENCY_SYMBOL.get()}"
 
 
 def _pct(value: Any, decimals: int = 1) -> str:
@@ -462,6 +469,27 @@ class _NumberedCanvas(canvas.Canvas):
 
 
 # ------------------------------------------------------------------- sections
+LOGO_PATH = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), "..", "..", "dashboard", "assets", "lynx-logo.png"
+)
+
+
+def _logo(height: float = 3.1 * cm) -> Optional[Image]:
+    """The LYNX logo (transparent PNG) scaled to ``height``; None if the file is missing."""
+    path = os.path.normpath(LOGO_PATH)
+    if not os.path.exists(path):
+        return None
+    try:
+        from PIL import Image as PILImage
+
+        with PILImage.open(path) as im:
+            ratio = im.width / im.height
+        return Image(path, width=height * ratio, height=height, mask="auto")
+    except Exception:  # a broken logo must never break the report
+        logger.warning("LYNX logo could not be loaded: %s", path)
+        return None
+
+
 def _cover(analysis: Dict[str, Any], st: Dict[str, ParagraphStyle]) -> Table:
     params = analysis.get("parameters") or {}
     seed = params.get("seed")
@@ -474,29 +502,52 @@ def _cover(analysis: Dict[str, Any], st: Dict[str, ParagraphStyle]) -> Table:
         f"Graine : {_p(seed if seed is not None else 'aléatoire')}"
     )
 
-    block = Table(
+    logo = _logo()
+    logo_w = (logo.drawWidth + 0.6 * cm) if logo else 0
+    text_w = CONTENT_W - logo_w
+
+    title_block = Table(
         [
             [Paragraph("LYNX &nbsp;·&nbsp; PROBABILISTIC THREAT HUNTING", st["eyebrow"])],
             [Paragraph("Rapport d'analyse de risque<br/>et d'investigation", st["title"])],
             [Paragraph(
                 "Détection comportementale, quantification FAIR du risque "
                 "et aide à la décision.", st["subtitle"])],
-            [Spacer(1, 6)],
-            [Paragraph(meta, st["meta"])],
         ],
-        colWidths=[CONTENT_W],
+        colWidths=[text_w],
+        hAlign="LEFT",
+    )
+    title_block.setStyle(
+        TableStyle(
+            [
+                ("LEFTPADDING", (0, 0), (-1, -1), 0),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+                ("TOPPADDING", (0, 0), (-1, -1), 1),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 1),
+            ]
+        )
+    )
+
+    block = Table(
+        [
+            [title_block, logo or ""],
+            [Paragraph(meta, st["meta"]), ""],
+        ],
+        colWidths=[text_w, logo_w] if logo else [CONTENT_W, 0],
         hAlign="LEFT",
     )
     block.setStyle(
         TableStyle(
             [
                 ("BACKGROUND", (0, 0), (-1, -1), NAVY),
+                ("SPAN", (0, 1), (-1, 1)),
+                ("VALIGN", (0, 0), (-1, 0), "MIDDLE"),
                 ("LEFTPADDING", (0, 0), (-1, -1), 16),
                 ("RIGHTPADDING", (0, 0), (-1, -1), 16),
-                ("TOPPADDING", (0, 0), (0, 0), 16),
-                ("BOTTOMPADDING", (0, -1), (-1, -1), 14),
-                ("TOPPADDING", (0, 1), (-1, -2), 1),
-                ("BOTTOMPADDING", (0, 0), (-1, -2), 1),
+                ("TOPPADDING", (0, 0), (-1, 0), 16),
+                ("BOTTOMPADDING", (0, 0), (-1, 0), 8),
+                ("TOPPADDING", (0, 1), (-1, 1), 4),
+                ("BOTTOMPADDING", (0, 1), (-1, 1), 14),
             ]
         )
     )
@@ -599,7 +650,18 @@ def _section_summary(analysis, st) -> List[Any]:
     return story
 
 
-def _section_method(st) -> List[Any]:
+def _currency_sentence(analysis: Dict[str, Any]) -> str:
+    cur = analysis.get("currency") or {}
+    if not cur or cur.get("code") == "USD":
+        return " Montants exprimés en dollars américains."
+    return (
+        f" Montants exprimés en {_clean(cur.get('code'))} ({_clean(cur.get('symbol'))}) : "
+        f"le moteur valorise les pertes en dollars américains, convertis au taux de "
+        f"1 USD = {_num(cur.get('rate_from_usd'), 4)} {_clean(cur.get('symbol'))}."
+    )
+
+
+def _section_method(analysis, st) -> List[Any]:
     sims = getattr(chi_square_tests, "n_simulations", 10000)
     alpha = getattr(chi_square_tests, "p_value_threshold", 0.05)
     return [
@@ -633,7 +695,8 @@ def _section_method(st) -> List[Any]:
             "d'événement de perte ; elle est combinée à l'amplitude de perte probable "
             "dans une simulation de Monte Carlo. On en déduit la perte annuelle "
             "attendue (ALE), la valeur à risque à 95 % et 99 % (VaR) et la perte "
-            "moyenne au-delà de la VaR 95 % (expected shortfall).", st["body"]),
+            "moyenne au-delà de la VaR 95 % (expected shortfall)." + _currency_sentence(analysis),
+            st["body"]),
         Paragraph(
             "<b>Kill chain et investigation.</b> Les événements sont classés par étape "
             "(reconnaissance, exploitation, persistence, mouvement latéral, "
@@ -839,6 +902,15 @@ def _section_killchain(analysis, st) -> List[Any]:
     return story
 
 
+def _technique_labels(ids: Optional[Iterable[str]]) -> str:
+    """'T1046 (Network Service Discovery), T1018 (...)' using the ATT&CK catalogue."""
+    labels = []
+    for technique_id in ids or []:
+        name = mitre_kb.name(technique_id)
+        labels.append(f"{technique_id} ({name})" if name else str(technique_id))
+    return ", ".join(labels) or "-"
+
+
 def _list_or_dash(values: Iterable[Any], limit: int = 8) -> str:
     items = [_clean(v) for v in values if _clean(v)]
     if not items:
@@ -900,17 +972,29 @@ def _section_investigation(analysis, st) -> List[Any]:
         techniques = report.get("mitre_attack_mapping") or []
         story.append(Paragraph("Techniques MITRE ATT&amp;CK", st["h2"]))
         if techniques:
-            rows = [["Technique", "Tactique (kill chain)", "Événement", "Description"]]
+            rows = [["Technique", "Nom", "Tactique(s) ATT&CK", "Événement(s)", "Pertinence"]]
             for t in techniques:
+                terms = ", ".join(t.get("matched_terms") or [])
                 rows.append([
                     _clean(t.get("technique_id")),
-                    _clean(t.get("stage")).replace("_", " "),
-                    _clean(t.get("event_type")).replace("_", " "),
-                    _clean(t.get("description")),
+                    _clean(t.get("name") or t.get("description")),
+                    _clean(", ".join(t.get("tactics") or [])) or "-",
+                    _clean(", ".join(
+                        e.replace("_", " ") for e in (t.get("event_types") or [t.get("event_type", "")])
+                    )),
+                    f"{_num(t.get('score'), 1)}" + (f" ({terms})" if terms else ""),
                 ])
             story.append(_table(
-                rows, [2.3 * cm, 3.8 * cm, 3.6 * cm, CONTENT_W - 9.7 * cm], st,
+                rows, [2.0 * cm, 3.9 * cm, 3.3 * cm, 2.8 * cm, CONTENT_W - 12.0 * cm], st,
                 first_col_bold=True))
+            sources = sorted({_clean(t.get("source")) for t in techniques if t.get("source")})
+            story.append(Paragraph(
+                "Source : " + _p(", ".join(sources) or "-") + ". Correspondance automatique : "
+                "chaque événement est recherché dans le catalogue ATT&amp;CK (nom des techniques "
+                "pondéré trois fois plus que leur description), restreint aux tactiques "
+                "compatibles avec son étape de kill chain. La pertinence est un score de "
+                "recherche, pas une probabilité ; la correspondance reste à valider par un analyste.",
+                st["small"]))
         else:
             story.append(Paragraph("Aucune technique MITRE corrélée.", st["body"]))
 
@@ -954,7 +1038,7 @@ def _section_hypotheses(analysis, st) -> List[Any]:
                 f"H{index}. {_p(h.get('title'))} "
                 f"<font color='#5b677a' size='8'>({_p(_clean(h.get('stage')).replace('_', ' '))}"
                 f" · confiance {_p(_pct(h.get('confidence'), 0))}"
-                f" · MITRE {_p(', '.join(h.get('mitre_techniques') or []) or '-')})</font>",
+                f" · MITRE {_p(_technique_labels(h.get('mitre_techniques')))})</font>",
                 st["cellb"]),
             Paragraph(_p(h.get("description")), st["body"]),
         ]
@@ -1014,6 +1098,11 @@ def _section_limits(analysis, st) -> List[Any]:
         "simulation lorsque les effectifs attendus sont faibles.",
         "Le score « 1 - p » exprime la force de la preuve contre H0 ; il ne doit pas "
         "être lu comme une probabilité d'attaque.",
+        "La correspondance événement -> technique MITRE ATT&CK est automatique "
+        "(recherche dans le catalogue officiel) : c'est une aide à l'investigation, "
+        "à valider par un analyste, pas une attribution certaine.",
+        "Le taux de change est fixe (paramètre de configuration), non actualisé "
+        "automatiquement : il doit être aligné sur le taux de la Banque centrale.",
         "Les paramètres FAIR (fréquences, vulnérabilité, amplitude de perte) sont des "
         "valeurs par défaut non calibrées sur le contexte métier : l'ALE et la VaR "
         "sont des ordres de grandeur pour prioriser, pas des montants budgétaires.",
@@ -1025,7 +1114,7 @@ def _section_limits(analysis, st) -> List[Any]:
 
 
 # ------------------------------------------------------------------ entry point
-def build_risk_report(analysis: Dict[str, Any]) -> bytes:
+def _render(analysis: Dict[str, Any]) -> bytes:
     """Render the analysis as a PDF and return its bytes."""
     st = _styles()
     buffer = io.BytesIO()
@@ -1051,7 +1140,7 @@ def build_risk_report(analysis: Dict[str, Any]) -> bytes:
     story: List[Any] = [_cover(analysis, st), Spacer(1, 6)]
     for section in (
         lambda: _section_summary(analysis, st),
-        lambda: _section_method(st),
+        lambda: _section_method(analysis, st),
         lambda: _section_chi(analysis, st),
         lambda: _section_events(analysis, st),
         lambda: _section_treatment(analysis, st),
@@ -1065,3 +1154,14 @@ def build_risk_report(analysis: Dict[str, Any]) -> bytes:
 
     document.build(story, canvasmaker=Canvas)
     return buffer.getvalue()
+
+
+
+def build_risk_report(analysis: Dict[str, Any]) -> bytes:
+    """Render the analysis as a PDF and return its bytes."""
+    symbol = _clean((analysis.get("currency") or {}).get("symbol") or "DT")
+    token = _CURRENCY_SYMBOL.set(symbol)
+    try:
+        return _render(analysis)
+    finally:
+        _CURRENCY_SYMBOL.reset(token)
