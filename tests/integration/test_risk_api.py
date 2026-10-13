@@ -111,7 +111,10 @@ def test_mitre_status_reports_the_knowledge_base():
 
 
 def test_mitre_search_finds_the_technique_for_a_port_scan():
-    data = mitre_client.get("/api/mitre/search?q=port scan&stage=reconnaissance").json()
+    # "port_scan" is the platform's event type (it carries search hints). A free-text
+    # query such as "port scan" is ambiguous on the real catalogue: T1596.005
+    # "Scan Databases" has "scan" in its name and ranks first.
+    data = mitre_client.get("/api/mitre/search?q=port_scan&stage=reconnaissance").json()
 
     assert data["results"][0]["technique_id"] == "T1046"
 
