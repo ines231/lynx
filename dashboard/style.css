@@ -134,3 +134,17 @@ button.stage:hover{border-color:#4d6fb4}
 .donut-legend li{display:flex;align-items:center;gap:8px}
 .donut-legend i{width:10px;height:10px;border-radius:3px;display:inline-block}
 .donut-legend b{margin-left:auto;padding-left:14px;color:#e1e8f4}
+
+/* ATT&CK matrix */
+#mitreMatrix{margin-bottom:18px}
+.mx-scroll{overflow-x:auto;padding-bottom:6px}
+.mx{display:grid;grid-template-columns:repeat(14,minmax(112px,1fr));gap:6px;min-width:1560px}
+.mx-col{display:flex;flex-direction:column;gap:6px;min-height:120px;padding:6px;border:1px solid #172231;border-radius:8px;background:#0a1019;opacity:.55}
+.mx-col.hit{opacity:1;border-color:#2f4470}
+.mx-head{display:flex;justify-content:space-between;gap:4px;font-size:11px;font-weight:800;color:#7f8ca0;padding:4px 2px}
+.mx-col.hit .mx-head{color:#aebbd0}
+.mx-head em{font-style:normal;color:#ff9696}
+.mx-cell{display:block;padding:8px;border-radius:6px;background:#351d22;border:1px solid #63333b;color:#ffd0d0;text-decoration:none}
+.mx-cell:hover{background:#4a2530;border-color:#ff9696}
+.mx-cell b{display:block;font-size:11px;color:#ff9696}
+.mx-cell span{display:block;margin-top:3px;font-size:11px;line-height:1.3;color:#e9c4c4}

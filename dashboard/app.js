@@ -252,6 +252,16 @@ function renderTechniques(techniques) {
     : "";
 }
 
+function renderMatrix(techniques) {
+  const list = techniques || [];
+  $("matrixBody").innerHTML = attackMatrixHtml(list);
+  const tactics = new Set(list.flatMap((t) => t.tactics || []));
+  $("matrixChip").textContent = `${list.length} technique(s) · ${tactics.size} tactique(s)`;
+  $("matrixNote").textContent = list[0]?.source
+    ? `Source : ${list[0].source}. Clique sur une case pour ouvrir la fiche officielle de la technique.`
+    : "Tactiques ATT&CK touchées par l'attaque ; chaque case est une technique détectée.";
+}
+
 function showError(err) {
   const box = $("errorBox");
   box.classList.remove("hidden");
@@ -379,6 +389,7 @@ async function load() {
     renderControls(highest?.recommended_controls);
     renderIocs(report);
     renderTechniques(techniques);
+    renderMatrix(techniques);
 
     $("attackId").textContent = report?.attack_summary?.attack_id || "—";
     $("sourceIp").textContent = report?.attack_summary?.source_ip || "—";

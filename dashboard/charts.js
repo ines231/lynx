@@ -175,3 +175,43 @@ function donutSvg(rows, centerLabel) {
     <ul class="donut-legend">${legend}</ul>
   </div>`;
 }
+
+// ATT&CK matrix: the 14 enterprise tactics as columns, the detected techniques as
+// highlighted cells. techniques = [{technique_id, name, tactics[], url, score, ...}]
+const ATTACK_TACTICS = [
+  ["reconnaissance", "Reconnaissance"], ["resource-development", "Resource Dev."],
+  ["initial-access", "Initial Access"], ["execution", "Execution"],
+  ["persistence", "Persistence"], ["privilege-escalation", "Privilege Esc."],
+  ["defense-evasion", "Defense Evasion"], ["credential-access", "Credential Access"],
+  ["discovery", "Discovery"], ["lateral-movement", "Lateral Movement"],
+  ["collection", "Collection"], ["command-and-control", "C2"],
+  ["exfiltration", "Exfiltration"], ["impact", "Impact"]
+];
+
+function attackMatrixHtml(techniques) {
+  const list = techniques || [];
+  const known = new Set(ATTACK_TACTICS.map((t) => t[0]));
+  const columns = ATTACK_TACTICS.map(([key, label]) => {
+    const cells = list.filter((t) => (t.tactics || []).includes(key));
+    const body = cells.map((t) => {
+      const tip = `${t.technique_id} ${t.name || ""}` +
+        (t.event_types && t.event_types.length ? ` — événement(s) : ${t.event_types.join(", ")}` : "") +
+        (t.score != null ? ` — pertinence ${t.score}` : "");
+      const href = /^https:\/\/attack\.mitre\.org\//.test(t.url || "") ? t.url : null;
+      const inner = `<b>${esc(t.technique_id)}</b><span>${esc(t.name || "")}</span>`;
+      return href
+        ? `<a class="mx-cell" href="${esc(href)}" target="_blank" rel="noopener noreferrer" title="${esc(tip)}">${inner}</a>`
+        : `<div class="mx-cell" title="${esc(tip)}">${inner}</div>`;
+    }).join("");
+    return `<div class="mx-col ${cells.length ? "hit" : ""}">
+      <div class="mx-head">${esc(label)}<em>${cells.length || ""}</em></div>
+      ${body}
+    </div>`;
+  }).join("");
+
+  const orphans = list.filter((t) => !(t.tactics || []).some((x) => known.has(x)));
+  const note = orphans.length
+    ? `<p class="muted">${orphans.length} technique(s) sans tactique reconnue : ${orphans.map((t) => esc(t.technique_id)).join(", ")}.</p>`
+    : "";
+  return `<div class="mx-scroll"><div class="mx">${columns}</div></div>${note}`;
+}
