@@ -47,6 +47,7 @@ from reportlab.platypus import (
     TableStyle,
 )
 
+from ai_service.mitre.knowledge_base import mitre_kb
 from ai_service.risk.chi_square_tests import chi_square_tests
 
 logger = logging.getLogger(__name__)
@@ -901,6 +902,15 @@ def _section_killchain(analysis, st) -> List[Any]:
     return story
 
 
+def _technique_labels(ids: Optional[Iterable[str]]) -> str:
+    """'T1046 (Network Service Discovery), T1018 (...)' using the ATT&CK catalogue."""
+    labels = []
+    for technique_id in ids or []:
+        name = mitre_kb.name(technique_id)
+        labels.append(f"{technique_id} ({name})" if name else str(technique_id))
+    return ", ".join(labels) or "-"
+
+
 def _list_or_dash(values: Iterable[Any], limit: int = 8) -> str:
     items = [_clean(v) for v in values if _clean(v)]
     if not items:
@@ -962,17 +972,29 @@ def _section_investigation(analysis, st) -> List[Any]:
         techniques = report.get("mitre_attack_mapping") or []
         story.append(Paragraph("Techniques MITRE ATT&amp;CK", st["h2"]))
         if techniques:
-            rows = [["Technique", "Tactique (kill chain)", "Événement", "Description"]]
+            rows = [["Technique", "Nom", "Tactique(s) ATT&CK", "Événement(s)", "Pertinence"]]
             for t in techniques:
+                terms = ", ".join(t.get("matched_terms") or [])
                 rows.append([
                     _clean(t.get("technique_id")),
-                    _clean(t.get("stage")).replace("_", " "),
-                    _clean(t.get("event_type")).replace("_", " "),
-                    _clean(t.get("description")),
+                    _clean(t.get("name") or t.get("description")),
+                    _clean(", ".join(t.get("tactics") or [])) or "-",
+                    _clean(", ".join(
+                        e.replace("_", " ") for e in (t.get("event_types") or [t.get("event_type", "")])
+                    )),
+                    f"{_num(t.get('score'), 1)}" + (f" ({terms})" if terms else ""),
                 ])
             story.append(_table(
-                rows, [2.3 * cm, 3.8 * cm, 3.6 * cm, CONTENT_W - 9.7 * cm], st,
+                rows, [2.0 * cm, 3.9 * cm, 3.3 * cm, 2.8 * cm, CONTENT_W - 12.0 * cm], st,
                 first_col_bold=True))
+            sources = sorted({_clean(t.get("source")) for t in techniques if t.get("source")})
+            story.append(Paragraph(
+                "Source : " + _p(", ".join(sources) or "-") + ". Correspondance automatique : "
+                "chaque événement est recherché dans le catalogue ATT&amp;CK (nom des techniques "
+                "pondéré trois fois plus que leur description), restreint aux tactiques "
+                "compatibles avec son étape de kill chain. La pertinence est un score de "
+                "recherche, pas une probabilité ; la correspondance reste à valider par un analyste.",
+                st["small"]))
         else:
             story.append(Paragraph("Aucune technique MITRE corrélée.", st["body"]))
 
@@ -1016,7 +1038,7 @@ def _section_hypotheses(analysis, st) -> List[Any]:
                 f"H{index}. {_p(h.get('title'))} "
                 f"<font color='#5b677a' size='8'>({_p(_clean(h.get('stage')).replace('_', ' '))}"
                 f" · confiance {_p(_pct(h.get('confidence'), 0))}"
-                f" · MITRE {_p(', '.join(h.get('mitre_techniques') or []) or '-')})</font>",
+                f" · MITRE {_p(_technique_labels(h.get('mitre_techniques')))})</font>",
                 st["cellb"]),
             Paragraph(_p(h.get("description")), st["body"]),
         ]
@@ -1076,6 +1098,9 @@ def _section_limits(analysis, st) -> List[Any]:
         "simulation lorsque les effectifs attendus sont faibles.",
         "Le score « 1 - p » exprime la force de la preuve contre H0 ; il ne doit pas "
         "être lu comme une probabilité d'attaque.",
+        "La correspondance événement -> technique MITRE ATT&CK est automatique "
+        "(recherche dans le catalogue officiel) : c'est une aide à l'investigation, "
+        "à valider par un analyste, pas une attribution certaine.",
         "Le taux de change est fixe (paramètre de configuration), non actualisé "
         "automatiquement : il doit être aligné sur le taux de la Banque centrale.",
         "Les paramètres FAIR (fréquences, vulnérabilité, amplitude de perte) sont des "

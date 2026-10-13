@@ -95,3 +95,7 @@ footer{padding:18px 0 4px;color:#526076;font-size:11px}
 @media(max-width:650px){.chi-grid{grid-template-columns:1fr 1fr}}
 
 .brand-logo{width:46px;height:auto;display:block;filter:drop-shadow(0 0 10px #7c4dff55)}
+
+a.tag{color:#aebbd0;text-decoration:none}a.tag:hover{border-color:#4d6fb4;background:#101b2c}
+.tag em{color:#6e8bbd;font-style:normal;font-size:10px;margin-left:5px}
+.mitre-source{margin:10px 0 0;line-height:1.5}

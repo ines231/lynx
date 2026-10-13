@@ -93,3 +93,42 @@ def test_report_pdf_without_an_id_runs_a_fresh_analysis():
 
     assert response.status_code == 200
     assert response.content.startswith(b"%PDF")
+
+
+# ------------------------------------------------------------ MITRE API
+from ai_service.app.api import mitre as mitre_api  # noqa: E402
+
+mitre_app = FastAPI()
+mitre_app.include_router(mitre_api.router)
+mitre_client = TestClient(mitre_app)
+
+
+def test_mitre_status_reports_the_knowledge_base():
+    data = mitre_client.get("/api/mitre/status").json()
+
+    assert data["source"] in {"live", "cache", "stale-cache", "fallback"}
+    assert data["technique_count"] > 0
+
+
+def test_mitre_search_finds_the_technique_for_a_port_scan():
+    data = mitre_client.get("/api/mitre/search?q=port scan&stage=reconnaissance").json()
+
+    assert data["results"][0]["technique_id"] == "T1046"
+
+
+def test_mitre_search_rejects_an_unknown_stage():
+    assert mitre_client.get("/api/mitre/search?q=scan&stage=nope").status_code == 422
+
+
+def test_mitre_technique_lookup():
+    ok = mitre_client.get("/api/mitre/techniques/t1046")
+    assert ok.status_code == 200 and ok.json()["id"] == "T1046"
+    assert mitre_client.get("/api/mitre/techniques/T0000").status_code == 404
+
+
+def test_analyze_exposes_the_mitre_knowledge_base_used():
+    data = client.get("/api/risk/analyze?seed=7").json()
+
+    assert data["mitre"]["technique_count"] > 0
+    assert data["mitre"]["source"]
+    assert data["currency"]["code"] in {"TND", "USD"}

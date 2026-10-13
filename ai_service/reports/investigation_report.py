@@ -3,37 +3,12 @@ from datetime import datetime
 import logging
 import hashlib
 
+from ai_service.mitre.correlator import mitre_correlator
+
 logger = logging.getLogger(__name__)
 
 class InvestigationReportGenerator:
     """Generate comprehensive investigation reports"""
-    
-    # MITRE ATT&CK mapping
-    MITRE_MAPPING = {
-        "reconnaissance": {
-            "port_scan": "T1046",  # Network Service Discovery
-            "dns_query": "T1018",  # Remote System Discovery
-            "network_scan": "T1046"
-        },
-        "exploitation": {
-            "privilege_escalation": "T1548",  # Abuse Elevation Control Mechanism
-            "code_injection": "T1055"  # Process Injection
-        },
-        "persistence": {
-            "registry_modification": "T1547",  # Boot or Logon Autostart Execution
-            "scheduled_task": "T1053",  # Scheduled Task/Job
-            "service_install": "T1543"  # Create or Modify System Process
-        },
-        "lateral_movement": {
-            "lateral_movement": "T1570",  # Lateral Tool Transfer
-            "credential_use": "T1078"  # Valid Accounts
-        },
-        "exfiltration": {
-            "data_transfer": "T1041",  # Exfiltration Over C2 Channel
-            "archive_creation": "T1560",  # Archive Collected Data
-            "file_access": "T1005"  # Data from Local System
-        }
-    }
     
     def generate_report(self, attack: Dict[str, Any], anomalies: List[Dict] = None) -> Dict[str, Any]:
         """
@@ -131,47 +106,14 @@ class InvestigationReportGenerator:
         
         return {k: list(v) for k, v in iocs.items()}
     
-    def _map_mitre_attack(self, attack: Dict[str, Any]) -> List[Dict[str, str]]:
-        """Map detected events to MITRE ATT&CK techniques"""
-        techniques = []
-        seen = set()
-        
-        for event in attack["events"]:
-            stage = event.get("kill_chain_stage", "unknown")
-            event_type = event.get("event_type", "")
-            
-            if stage in self.MITRE_MAPPING and event_type in self.MITRE_MAPPING[stage]:
-                technique_id = self.MITRE_MAPPING[stage][event_type]
-                if technique_id not in seen:
-                    techniques.append({
-                        "technique_id": technique_id,
-                        "stage": stage,
-                        "event_type": event_type,
-                        "description": self._get_technique_description(technique_id)
-                    })
-                    seen.add(technique_id)
-        
-        return techniques
-    
-    @staticmethod
-    def _get_technique_description(technique_id: str) -> str:
-        """Get description for MITRE technique"""
-        descriptions = {
-            "T1046": "Network Service Discovery",
-            "T1018": "Remote System Discovery",
-            "T1548": "Abuse Elevation Control Mechanism",
-            "T1055": "Process Injection",
-            "T1547": "Boot or Logon Autostart Execution",
-            "T1053": "Scheduled Task/Job",
-            "T1543": "Create or Modify System Process",
-            "T1570": "Lateral Tool Transfer",
-            "T1078": "Valid Accounts",
-            "T1041": "Exfiltration Over C2 Channel",
-            "T1560": "Archive Collected Data",
-            "T1005": "Data from Local System"
-        }
-        return descriptions.get(technique_id, "Unknown Technique")
-    
+    def _map_mitre_attack(self, attack: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """Map the events of the attack to MITRE ATT&CK techniques (dynamic).
+
+        The technique catalogue comes from the official ATT&CK data
+        (see ``ai_service.mitre``); nothing is hard-coded here.
+        """
+        return mitre_correlator.map_attack(attack)
+
     @staticmethod
     def _build_timeline(events: List[Dict]) -> List[Dict]:
         """Build chronological timeline of events"""

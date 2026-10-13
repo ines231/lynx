@@ -50,11 +50,12 @@ ai_service/
     monte_carlo_fair.py     quantification FAIR : ALE, VaR 95 % / 99 %
     risk_treatment.py       stratégie, priorité, contrôles recommandés
   correlation/kill_chain.py corrélation des événements sur la kill chain
+  mitre/                    base ATT&CK officielle (cache local) et corrélation événement -> technique
   hypotheses/               hypothèses de chasse et requêtes suggérées
   reports/
-    investigation_report.py rapport d'investigation (IOC, MITRE, chronologie)
+    investigation_report.py rapport d'investigation (IOC, MITRE dynamique, chronologie)
     pdf_report.py           rapport PDF structuré
-dashboard/                  interface web (HTML, CSS, JavaScript)
+dashboard/                  interface web (HTML, CSS, JavaScript) et logo (assets/)
 config/settings.py          paramètres (variables d'environnement ou config/.env)
 tests/                      tests unitaires et d'intégration
 ```
@@ -91,6 +92,9 @@ Les paramètres (port, seuils, clés d'API de threat intelligence) se règlent p
 | --- | --- | --- |
 | GET | `/api/risk/analyze` | analyse complète ; renvoie un `analysis_id`. Paramètres : `normal_count`, `seed` (résultats reproductibles) |
 | GET | `/api/risk/report.pdf` | rapport PDF. `analysis_id` : PDF de l'analyse affichée (410 si expirée) ; sans identifiant : nouvelle analyse |
+| GET | `/api/mitre/status` | état de la base MITRE ATT&CK : source, version, nombre de techniques, fraîcheur |
+| POST | `/api/mitre/refresh` | relance le téléchargement des données ATT&CK en arrière-plan |
+| GET | `/api/mitre/search`, `/techniques/{id}` | recherche (`q`, `stage`) et fiche d'une technique |
 | GET | `/api/risk/demo` | démonstration du moteur de risque de bout en bout |
 | GET | `/api/events/sample`, `/attack-scenario` | événements simulés |
 | POST | `/api/events/enrich`, `/enrich-batch`, `/ingest` | enrichissement et ingestion |
@@ -123,7 +127,22 @@ curl -o rapport.pdf "http://localhost:8000/api/risk/report.pdf?seed=7"
 
 **Traitement du risque.** Selon l'ALE et le contexte, le moteur propose une stratégie (remédiation urgente, atténuation, transfert, acceptation, surveillance), une priorité, un délai et des contrôles.
 
-**Kill chain et investigation.** Les événements sont classés par étape (reconnaissance, exploitation, persistence, mouvement latéral, exfiltration), chaînés par continuité de source et de destination, puis rattachés aux techniques MITRE ATT&CK. Des hypothèses de chasse avec requêtes suggérées en sont déduites.
+**Kill chain.** Les événements sont classés par étape (reconnaissance, exploitation, persistence, mouvement latéral, exfiltration) d'après leur type, puis chaînés par continuité de source et de destination.
+
+**Corrélation MITRE ATT&CK dynamique.** Aucun tableau n'est écrit en dur : les techniques viennent des données officielles de MITRE (STIX, sans clé d'API).
+
+- Le catalogue Enterprise (≈ 700 techniques et sous-techniques actives) est téléchargé depuis `mitre-attack/attack-stix-data`, réduit à un cache local de moins de 1 Mo (`data/mitre/techniques.json`, ignoré par git) et rafraîchi tous les 7 jours. Le chargement se fait en arrière-plan au démarrage.
+- Pour chaque événement, une requête est construite (type, processus, ligne de commande, description de la règle) et comparée à tout le catalogue avec un score de type TF-IDF : un mot trouvé dans le **nom** de la technique compte trois fois plus que dans sa description, et un mot rare pèse plus qu'un mot courant.
+- Seules les techniques dont la **tactique ATT&CK est compatible avec l'étape de kill chain** de l'événement sont candidates.
+- Si la source fournit déjà des identifiants ATT&CK (règle Wazuh réelle), ils sont utilisés tels quels.
+- Chaque technique renvoyée indique son score, les termes qui ont déclenché la correspondance et sa provenance (version d'ATT&CK).
+- **Hors ligne** : le cache périmé est conservé ; sans aucun cache, une petite table intégrée prend le relais.
+
+```bash
+python -m ai_service.mitre        # télécharger / rafraîchir la base maintenant
+```
+
+Configuration : `MITRE_SOURCE_URL` (URL ou chemin local d'un fichier STIX, utile sans accès internet), `MITRE_CACHE_TTL_DAYS` (7), `MITRE_AUTO_UPDATE` (`false` pour ne jamais utiliser le réseau).
 
 ## Résultats
 
@@ -156,7 +175,17 @@ Les types `port_scan`, `privilege_escalation`, `service_installation` et `latera
 
 L'événement le plus exposé est l'accès à un fichier sensible (`C:\Data\Financial\reports.xlsx`) par un compte de service : **remédiation urgente, délai inférieur à 4 heures**, avec pour objectif une ALE ramenée de 17 497 DT à 2 625 DT (−85 %).
 
-**Corrélation.** Une attaque reconstituée (gravité *high*, confiance 78,6 %, source 192.168.1.50), 4 étapes sur 5 de la kill chain observées, 3 techniques MITRE (T1046, T1548, T1570), 8 hypothèses de chasse.
+**Corrélation.** Une attaque reconstituée (gravité *critical*, confiance 78,6 %, source 192.168.1.50), **5 étapes sur 5** de la kill chain observées, 10 hypothèses de chasse et 5 techniques MITRE trouvées dynamiquement dans ATT&CK v19.2 :
+
+| Étape | Événement | Technique ATT&CK |
+| --- | --- | --- |
+| Reconnaissance | port_scan | T1046 Network Service Discovery |
+| Exploitation | privilege_escalation | T1068 Exploitation for Privilege Escalation |
+| Persistence | service_installation | T1053.005 Scheduled Task |
+| Mouvement latéral | lateral_movement | T1570 Lateral Tool Transfer |
+| Exfiltration | file_access | T1537 Transfer Data to Cloud Account |
+
+La technique de persistence vient de la description de l'événement (« Suspicious scheduled task created ») ; la correspondance est une aide à l'investigation, à valider par un analyste.
 
 ## Devise
 
@@ -193,12 +222,13 @@ pip install -r requirements.txt
 pytest -q
 ```
 
-45 tests : 36 unitaires (baseline, chi-carré, probabilités d'anomalie, FAIR, traitement du risque, pipeline, PDF) et 9 d'intégration de l'API. Les tests du chi-carré vérifient notamment qu'une fenêtre normale obtient un score faible, qu'une fenêtre d'attaque avec des types inconnus est significative, que le score croît avec l'écart à la baseline, que la méthode asymptotique coïncide avec `scipy` et que le résultat est déterministe.
+Une soixantaine de tests unitaires (baseline, chi-carré, probabilités d'anomalie, FAIR, traitement du risque, pipeline, PDF, devise, MITRE, kill chain) et des tests d'intégration de l'API. Les tests MITRE n'utilisent pas le réseau : ils travaillent sur un mini-catalogue synthétique. Les tests du chi-carré vérifient notamment qu'une fenêtre normale obtient un score faible, qu'une fenêtre d'attaque avec des types inconnus est significative, que le score croît avec l'écart à la baseline, que la méthode asymptotique coïncide avec `scipy` et que le résultat est déterministe.
 
 ## Limites et état réel
 
 - **Données simulées.** Wazuh et IntelOwl sont remplacés par des générateurs (`mock_wazuh`, `mock_intelowl`). Aucun flux de production n'est branché.
 - **Échantillon réduit.** La baseline compte 30 événements et la fenêtre testée 7 : la puissance statistique est limitée, d'où la p-value estimée par simulation.
+- **Correspondance MITRE automatique.** Elle repose sur une recherche textuelle dans le catalogue, pas sur une analyse sémantique : une description d'événement pauvre donne une correspondance approximative (par exemple T1537 pour un transfert de données vers une IP externe, alors que T1048 serait aussi défendable).
 - **Taux de change fixe.** La conversion USD → DT utilise un taux configuré à la main, pas un cours en direct.
 - **Paramètres FAIR non calibrés.** Fréquences, vulnérabilité et amplitude de perte sont des valeurs par défaut. L'ALE et la VaR donnent un ordre de grandeur pour prioriser, pas un budget.
 - **Seuils de priorité.** La priorité dépend de seuils sur l'ALE : dans l'exemple ci-dessus, l'escalade de privilèges et le mouvement latéral restent classés « INFO / acceptation » alors qu'ils appartiennent à une attaque en cours. À corriger en tenant compte de l'étape de la kill chain.

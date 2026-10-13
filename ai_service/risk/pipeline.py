@@ -19,6 +19,7 @@ from ai_service.risk.chi_square_tests import chi_square_tests
 from ai_service.risk.monte_carlo_fair import monte_carlo_fair
 from ai_service.risk.risk_treatment import risk_treatment
 from ai_service.risk.currency import get_display_currency
+from ai_service.mitre.knowledge_base import mitre_kb
 
 from ai_service.connectors.wazuh.mock_wazuh import mock_wazuh
 from ai_service.enrichment.enrichment_service import enrichment_service
@@ -195,6 +196,12 @@ async def run_analysis(
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "parameters": {"normal_count": normal_count, "seed": seed},
         "currency": currency.to_dict(),
+        "mitre": {
+            "source": mitre_kb.source_label(),
+            "official_data": mitre_kb.is_official,
+            "attack_version": mitre_kb.status().get("attack_version"),
+            "technique_count": mitre_kb.status().get("technique_count"),
+        },
         "baseline": {
             "user": baseline.get("user"),
             "event_count": baseline.get("event_count"),
@@ -221,6 +228,7 @@ def public_view(analysis: Dict[str, Any]) -> Dict[str, Any]:
         "generated_at": analysis["generated_at"],
         "parameters": analysis["parameters"],
         "currency": analysis["currency"],
+        "mitre": analysis["mitre"],
         "summary": {
             "total_events": len(analysis["events"]),
             "attacks_found": len(analysis["attacks"]),

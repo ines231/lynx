@@ -41,6 +41,12 @@ class Settings(BaseSettings):
     display_currency: str = "TND"      # "TND" or "USD"
     usd_to_tnd_rate: float = 2.9927    # dinars for 1 USD (12/10/2026, to be updated)
 
+    # MITRE ATT&CK knowledge base (official STIX data, cached locally)
+    mitre_source_url: str = ""         # URL or local path; empty = official GitHub bundle
+    mitre_cache_path: str = ""         # empty = data/mitre/techniques.json
+    mitre_cache_ttl_days: float = 7
+    mitre_auto_update: bool = True     # False = never use the network
+
     # Feature extraction
     baseline_days: int = 90
     anomaly_threshold: float = 3.0
