@@ -91,7 +91,23 @@ class ChiSquareTests:
             p_value = (exceed + 1) / (self.n_simulations + 1)
             method = "monte_carlo"
 
+        # Per-category detail: what the baseline predicts, what was seen, and
+        # how much of the chi-square statistic each category is responsible for.
+        contributions = (obs - exp) ** 2 / exp
+        categories_detail = [
+            {
+                "category": str(c),
+                "observed": int(obs[i]),
+                "expected": float(exp[i]),
+                "contribution": float(contributions[i]),
+                "share": float(contributions[i] / chi2_stat) if chi2_stat > 0 else 0.0,
+                "new": c not in baseline_counts,
+            }
+            for i, c in enumerate(categories)
+        ]
+
         return {
+            "categories": categories_detail,
             "chi2_statistic": chi2_stat,
             "p_value": float(p_value),
             "degrees_of_freedom": int(df),

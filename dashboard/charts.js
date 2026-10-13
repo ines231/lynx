@@ -90,3 +90,50 @@ function lossHistogramSvg(h, symbol) {
     <text class="haxis title" transform="translate(12 ${(m.t + ih / 2).toFixed(1)}) rotate(-90)" text-anchor="middle">Années simulées</text>
   </svg>`;
 }
+
+// Observed (attack window) vs expected (baseline) counts per event type, with the
+// share of the chi-square statistic each category is responsible for.
+// rows = chi_square.categories
+function baselineVsObservedSvg(rows) {
+  if (!rows || !rows.length) {
+    return '<div class="empty">Pas de détail par catégorie pour ce test.</div>';
+  }
+
+  const sorted = [...rows].sort((a, b) => b.contribution - a.contribution);
+  const W = SVG_NS_W, rowH = 46;
+  const m = { l: 138, r: 78, t: 8, b: 34 };
+  const H = m.t + m.b + sorted.length * rowH;
+  const iw = W - m.l - m.r;
+  const maxV = Math.max(...sorted.flatMap((r) => [r.observed, r.expected]), 1);
+  const ticks = niceTicks(maxV, 4);
+  const top = ticks[ticks.length - 1] || maxV;
+  const x = (v) => m.l + (v / top) * iw;
+  const fmt = (v) => v.toLocaleString("fr-FR", { maximumFractionDigits: 1 });
+
+  const grid = ticks.map((t) =>
+    `<line class="hgrid" x1="${x(t).toFixed(1)}" x2="${x(t).toFixed(1)}" y1="${m.t}" y2="${H - m.b}"/>
+     <text class="haxis" x="${x(t).toFixed(1)}" y="${H - m.b + 16}" text-anchor="middle">${compactNumber(t)}</text>`
+  ).join("");
+
+  const bars = sorted.map((r, i) => {
+    const y0 = m.t + i * rowH;
+    const tip = `${r.category} : attendu ${fmt(r.expected)}, observé ${r.observed}, ` +
+      `contribution au χ² = ${fmt(r.contribution)} (${(r.share * 100).toFixed(1)} %)` +
+      (r.new ? " — catégorie absente de la baseline" : "");
+    const hot = r.share >= 0.25;
+    return `<g class="cat-row"><title>${esc(tip)}</title>
+      <text class="cat-name" x="${m.l - 10}" y="${y0 + 20}" text-anchor="end">${esc(r.category)}${r.new ? " ★" : ""}</text>
+      <rect class="bar-exp" x="${m.l}" y="${y0 + 6}" width="${Math.max(x(r.expected) - m.l, 1).toFixed(1)}" height="11" rx="2"/>
+      <rect class="bar-obs" x="${m.l}" y="${y0 + 20}" width="${Math.max(x(r.observed) - m.l, r.observed > 0 ? 1 : 0).toFixed(1)}" height="11" rx="2"/>
+      <text class="cat-val" x="${(x(Math.max(r.expected, r.observed)) + 6).toFixed(1)}" y="${y0 + 22}">${r.observed} / ${fmt(r.expected)}</text>
+      <text class="cat-share ${hot ? "hot" : ""}" x="${W - 4}" y="${y0 + 22}" text-anchor="end">${(r.share * 100).toFixed(0)} %</text>
+    </g>`;
+  }).join("");
+
+  return `<svg class="chart" viewBox="0 0 ${W} ${H}" role="img"
+      aria-label="Comptes observés et attendus par type d'événement">
+    ${grid}${bars}
+    <line class="haxisline" x1="${m.l}" x2="${m.l}" y1="${m.t}" y2="${H - m.b}"/>
+    <text class="haxis title" x="${W - 4}" y="${H - 6}" text-anchor="end">part du χ²</text>
+  </svg>`;
+}

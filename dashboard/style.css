@@ -113,3 +113,8 @@ a.tag{color:#aebbd0;text-decoration:none}a.tag:hover{border-color:#4d6fb4;backgr
 .lg{display:inline-block;width:12px;height:12px;border-radius:3px;margin-right:6px;vertical-align:-2px}
 .lg-bar{background:#5b7cff}.lg-ale{background:#41db90}.lg-var95{background:#ffd779}.lg-var99{background:#ff9696}
 #lossChart{margin-bottom:18px}
+.bar-exp{fill:#3a4a63}.bar-obs{fill:#5b7cff}.lg-exp{background:#3a4a63}
+.cat-name{fill:#c8d1de;font-size:12px}.cat-val{fill:#8593a8;font-size:11px}
+.cat-share{fill:#7f8ca0;font-size:12px;font-weight:700}.cat-share.hot{fill:#ff9696}
+.cat-row:hover .bar-obs{fill:#88a9ff}
+#baselineChart{margin-bottom:18px}

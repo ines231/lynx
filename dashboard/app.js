@@ -76,6 +76,17 @@ function renderLossChart(h) {
   }
 }
 
+function renderBaselineChart(chi) {
+  const cats = chi?.categories || [];
+  $("baselineBars").innerHTML = baselineVsObservedSvg(cats);
+  if (!cats.length) return;
+  const top = [...cats].sort((a, b) => b.contribution - a.contribution)[0];
+  $("baselineChip").textContent = `χ² = ${Number(chi.chi2_statistic).toLocaleString("fr-FR", { maximumFractionDigits: 1 })}`;
+  $("baselineNote").textContent =
+    `« ${top.category} » explique à lui seul ${(top.share * 100).toFixed(0)} % de l'écart : ` +
+    `${top.observed} observé(s) pour ${Number(top.expected).toLocaleString("fr-FR", { maximumFractionDigits: 1 })} attendu(s).`;
+}
+
 function chiTitle(row, chi) {
   const score = typeof row.chi_square_probability === "number"
     ? ` · score 1 − p = ${pct(row.chi_square_probability)}` : "";
@@ -292,6 +303,7 @@ async function load() {
     $("riskVar99").textContent = money(highest?.value_at_risk_99);
 
     renderLossChart(risk.loss_histogram);
+    renderBaselineChart(risk.chi_square);
     renderBars(rows);
     renderRows(rows, risk.chi_square);
     renderKillChain(stages);

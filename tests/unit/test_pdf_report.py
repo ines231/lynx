@@ -162,3 +162,13 @@ def test_analysis_exposes_the_loss_histogram_of_the_riskiest_event():
     assert hist["value_at_risk_95"] <= hist["value_at_risk_99"]
     assert public_view(analysis)["loss_histogram"] == hist
     assert "_ale_usd" not in hist
+
+
+def test_chi_square_exposes_per_category_detail():
+    chi = _analysis()["chi_square"]
+    cats = chi["categories"]
+
+    assert cats and all(c["expected"] > 0 for c in cats)
+    assert sum(c["contribution"] for c in cats) == pytest.approx(chi["chi2_statistic"])
+    assert sum(c["share"] for c in cats) == pytest.approx(1.0)
+    assert sum(c["observed"] for c in cats) == chi["n_observed"]
