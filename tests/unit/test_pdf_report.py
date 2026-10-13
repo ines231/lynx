@@ -147,3 +147,18 @@ def test_report_is_still_built_when_the_logo_is_missing(monkeypatch):
 
     assert pdf_report._logo() is None
     assert build_risk_report(_analysis()).startswith(b"%PDF")
+
+
+# ------------------------------------------------------------ loss histogram
+def test_analysis_exposes_the_loss_histogram_of_the_riskiest_event():
+    analysis = _analysis()
+    hist = analysis["loss_histogram"]
+    ale_max = max(r["annual_loss_expectancy"] for r in analysis["event_risks"])
+
+    assert hist["annual_loss_expectancy"] == pytest.approx(ale_max)
+    assert len(hist["edges"]) == len(hist["counts"]) + 1
+    assert hist["edges"] == sorted(hist["edges"])
+    assert sum(hist["counts"]) == hist["loss_years"] <= hist["total_years"]
+    assert hist["value_at_risk_95"] <= hist["value_at_risk_99"]
+    assert public_view(analysis)["loss_histogram"] == hist
+    assert "_ale_usd" not in hist

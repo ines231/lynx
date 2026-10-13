@@ -99,3 +99,17 @@ footer{padding:18px 0 4px;color:#526076;font-size:11px}
 a.tag{color:#aebbd0;text-decoration:none}a.tag:hover{border-color:#4d6fb4;background:#101b2c}
 .tag em{color:#6e8bbd;font-style:normal;font-size:10px;margin-left:5px}
 .mitre-source{margin:10px 0 0;line-height:1.5}
+
+/* ---- charts ---- */
+.chart{width:100%;height:auto;display:block}
+.hbar{fill:#5b7cff;opacity:.85}.hbar:hover{opacity:1;fill:#88a9ff}
+.hgrid{stroke:#1b2737;stroke-width:1}.haxisline{stroke:#2a3a55}
+.haxis{fill:#7f8ca0;font-size:11px}.haxis.title{fill:#68788f;font-size:11px}
+.marker line{stroke-width:2;stroke-dasharray:5 4}.marker text{font-size:11px;font-weight:700}
+.m-ale line{stroke:#41db90}.m-ale text{fill:#41db90}
+.m-var95 line{stroke:#ffd779}.m-var95 text{fill:#ffd779}
+.m-var99 line{stroke:#ff9696}.m-var99 text{fill:#ff9696}
+.chart-legend{display:flex;flex-wrap:wrap;gap:16px;margin-top:10px;color:#7f8ca0;font-size:11px}
+.lg{display:inline-block;width:12px;height:12px;border-radius:3px;margin-right:6px;vertical-align:-2px}
+.lg-bar{background:#5b7cff}.lg-ale{background:#41db90}.lg-var95{background:#ffd779}.lg-var99{background:#ff9696}
+#lossChart{margin-bottom:18px}

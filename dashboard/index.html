@@ -87,6 +87,20 @@
       </article>
     </section>
 
+    <section class="card" id="lossChart">
+      <div class="section-head">
+        <div><h2>Distribution des pertes annuelles</h2><p id="lossChartNote">Simulation Monte-Carlo FAIR de l'événement le plus exposé.</p></div>
+        <span class="status-chip" id="lossChartEvent">—</span>
+      </div>
+      <div id="lossHistogram"></div>
+      <div class="chart-legend">
+        <span><i class="lg lg-bar"></i>Années avec perte</span>
+        <span><i class="lg lg-ale"></i>ALE (perte attendue)</span>
+        <span><i class="lg lg-var95"></i>VaR 95 %</span>
+        <span><i class="lg lg-var99"></i>VaR 99 %</span>
+      </div>
+    </section>
+
     <section class="card" id="feed">
       <div class="section-head">
         <div><h2>Event risk feed</h2><p>Priorisation par probabilité, perte attendue et traitement.</p></div>
@@ -159,6 +173,7 @@
     <footer>LYNX · Probabilistic Threat Hunting Platform · Dashboard intégré à FastAPI</footer>
   </main>
 </div>
+<script src="/dashboard/charts.js"></script>
 <script src="/dashboard/app.js"></script>
 </body>
 </html>

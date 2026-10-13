@@ -65,6 +65,17 @@ function renderBars(rows) {
   }).join("") || '<div class="empty">Aucune mesure disponible.</div>';
 }
 
+function renderLossChart(h) {
+  $("lossHistogram").innerHTML = lossHistogramSvg(h, currencySymbol);
+  $("lossChartEvent").textContent = h?.event ? `Événement : ${h.event}` : "—";
+  if (h && h.total_years) {
+    const share = ((h.loss_years / h.total_years) * 100).toFixed(1).replace(".", ",");
+    $("lossChartNote").textContent =
+      `${h.total_years.toLocaleString("fr-FR")} années simulées, dont ${share} % avec au moins une perte. ` +
+      `Les VaR portent sur les années avec perte ; au-delà de la dernière colonne, les pertes sont regroupées.`;
+  }
+}
+
 function chiTitle(row, chi) {
   const score = typeof row.chi_square_probability === "number"
     ? ` · score 1 − p = ${pct(row.chi_square_probability)}` : "";
@@ -280,6 +291,7 @@ async function load() {
     $("riskVar95").textContent = money(highest?.value_at_risk_95);
     $("riskVar99").textContent = money(highest?.value_at_risk_99);
 
+    renderLossChart(risk.loss_histogram);
     renderBars(rows);
     renderRows(rows, risk.chi_square);
     renderKillChain(stages);
