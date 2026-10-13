@@ -122,9 +122,16 @@
         <div><h2>Event risk feed</h2><p>Priorisation par probabilité, perte attendue et traitement.</p></div>
         <span id="lastUpdate" class="muted">—</span>
       </div>
+      <div class="toolbar" id="feedToolbar">
+        <input type="search" id="feedSearch" placeholder="Rechercher (événement, utilisateur, traitement…)" aria-label="Rechercher dans les événements">
+        <select id="feedPriority" aria-label="Filtrer par priorité"><option value="">Toutes priorités</option></select>
+        <select id="feedStage" aria-label="Filtrer par étape kill chain"><option value="">Toutes étapes</option></select>
+        <button type="button" class="secondary small" id="feedReset">Réinitialiser</button>
+        <span class="muted" id="feedCount">—</span>
+      </div>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>Événement</th><th>Utilisateur</th><th>Anomalie</th><th title="p-value du test du chi² sur tout le scénario (identique pour chaque ligne)">p-value χ²</th><th>ALE</th><th>Priorité</th><th>Traitement</th></tr></thead>
+          <thead><tr><th>Événement</th><th>Utilisateur</th><th class="sortable" data-sort="anomaly_probability">Anomalie</th><th title="p-value du test du chi² sur tout le scénario (identique pour chaque ligne)">p-value χ²</th><th class="sortable" data-sort="annual_loss_expectancy">ALE</th><th class="sortable" data-sort="priority_rank">Priorité</th><th>Traitement</th></tr></thead>
           <tbody id="riskTable"><tr><td colspan="7" class="empty">Chargement…</td></tr></tbody>
         </table>
       </div>
@@ -197,6 +204,13 @@
     <footer>LYNX · Probabilistic Threat Hunting Platform · Dashboard intégré à FastAPI</footer>
   </main>
 </div>
+<aside id="eventDrawer" class="drawer hidden" aria-label="Détail de l'événement" role="dialog">
+  <div class="drawer-head">
+    <div><strong id="drawerTitle">—</strong><span id="drawerSub" class="muted"></span></div>
+    <button type="button" class="secondary small" id="drawerClose" aria-label="Fermer">✕</button>
+  </div>
+  <div id="drawerBody"></div>
+</aside>
 <script src="/dashboard/charts.js"></script>
 <script src="/dashboard/app.js"></script>
 </body>

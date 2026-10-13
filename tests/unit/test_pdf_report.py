@@ -180,3 +180,12 @@ def test_each_event_risk_carries_its_kill_chain_stage():
     assert stages["port_scan"] == "reconnaissance"
     assert stages["file_access"] == "exfiltration"
     assert stages["lateral_movement"] == "lateral_movement"
+
+
+def test_public_view_exposes_event_details_aligned_with_event_risks():
+    view = public_view(_analysis())
+
+    assert len(view["event_details"]) == len(view["event_risks"])
+    assert {"hostname", "threat_event_frequency", "recommended_controls"} <= set(
+        view["event_details"][0]
+    )

@@ -272,6 +272,7 @@ def public_view(analysis: Dict[str, Any]) -> Dict[str, Any]:
         },
         "baseline": analysis["baseline"],
         "event_risks": analysis["event_risks"],
+        "event_details": analysis.get("event_details", []),
         "loss_histogram": analysis.get("loss_histogram"),
         "chi_square": analysis["chi_square"],
         "attacks": len(analysis["attacks"]),
