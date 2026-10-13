@@ -172,3 +172,11 @@ def test_chi_square_exposes_per_category_detail():
     assert sum(c["contribution"] for c in cats) == pytest.approx(chi["chi2_statistic"])
     assert sum(c["share"] for c in cats) == pytest.approx(1.0)
     assert sum(c["observed"] for c in cats) == chi["n_observed"]
+
+
+def test_each_event_risk_carries_its_kill_chain_stage():
+    stages = {r["event"]: r["stage"] for r in _analysis()["event_risks"]}
+
+    assert stages["port_scan"] == "reconnaissance"
+    assert stages["file_access"] == "exfiltration"
+    assert stages["lateral_movement"] == "lateral_movement"

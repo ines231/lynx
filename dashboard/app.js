@@ -142,16 +142,67 @@ function renderRows(rows, chi) {
   </tr>`).join("");
 }
 
-function renderKillChain(stages) {
-  const ordered = ["reconnaissance","exploitation","persistence","lateral_movement","exfiltration"];
-  $("killchainStages").innerHTML = ordered.map((s, i) => {
+const STAGE_ORDER = ["reconnaissance","exploitation","persistence","lateral_movement","exfiltration"];
+const PRIORITY_COLORS = {
+  CRITICAL: "#ff7a7a", HIGH: "#ff9c6b", MEDIUM: "#ffd779", LOW: "#7fe0ae", INFO: "#6e8bbd"
+};
+let selectedStage = null;
+let lastRows = [];
+
+function renderKillChain(stages, rows = lastRows) {
+  lastRows = rows;
+  $("killchainStages").innerHTML = STAGE_ORDER.map((s, i) => {
     const active = stages.includes(s);
-    return `<div class="stage ${active ? "active" : ""}">
-      <b>0${i+1}</b>
+    const inStage = rows.filter((r) => r.stage === s);
+    const sub = active
+      ? `Observé${inStage.length ? ` · ${inStage.length} évt` : ""}`
+      : "Non observé";
+    return `<button type="button" class="stage ${active ? "active" : ""} ${selectedStage === s ? "selected" : ""}"
+        data-stage="${s}" aria-pressed="${selectedStage === s}">
+      <b>0${i + 1}</b>
       <span>${stageLabel(s)}</span>
-      <small>${active ? "Observé" : "Non observé"}</small>
-    </div>`;
+      <small>${sub}</small>
+    </button>`;
   }).join("");
+
+  document.querySelectorAll("#killchainStages .stage").forEach((el) => {
+    el.addEventListener("click", () => {
+      selectedStage = selectedStage === el.dataset.stage ? null : el.dataset.stage;
+      renderKillChain(stages, rows);
+    });
+  });
+  renderStageDetail(rows);
+}
+
+function renderStageDetail(rows) {
+  const box = $("stageDetail");
+  if (!selectedStage) {
+    box.textContent = "Clique sur une étape pour voir ses événements.";
+    return;
+  }
+  const items = rows.filter((r) => r.stage === selectedStage);
+  if (!items.length) {
+    box.innerHTML = `<strong>${esc(stageLabel(selectedStage))}</strong> : aucun événement observé à cette étape.`;
+    return;
+  }
+  box.innerHTML = `<strong>${esc(stageLabel(selectedStage))}</strong> · ${items.length} événement(s)` +
+    `<ul>${items.map((r) => `<li><b>${esc(r.event)}</b> — ${esc(r.user || "—")} · ` +
+      `<span class="priority ${priorityClass(r.priority)}">${esc(r.priority || "—")}</span> · ` +
+      `ALE ${money(r.annual_loss_expectancy)}</li>`).join("")}</ul>`;
+}
+
+function renderPriorityDonut(rows) {
+  const counts = {};
+  rows.forEach((r) => {
+    const key = String(r.priority || "INFO").toUpperCase();
+    counts[key] = (counts[key] || 0) + 1;
+  });
+  const order = ["CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO"];
+  const keys = [...order.filter((k) => counts[k]), ...Object.keys(counts).filter((k) => !order.includes(k))];
+  $("priorityDonut").innerHTML = donutSvg(
+    keys.map((k) => ({ label: k, value: counts[k], color: PRIORITY_COLORS[k] || "#8593a8" })),
+    "événements"
+  );
 }
 
 function renderControls(controls) {
@@ -306,7 +357,8 @@ async function load() {
     renderBaselineChart(risk.chi_square);
     renderBars(rows);
     renderRows(rows, risk.chi_square);
-    renderKillChain(stages);
+    renderKillChain(stages, rows);
+    renderPriorityDonut(rows);
 
     $("chainSummary").textContent = stages.length + "/5 étapes observées";
     $("timelineNote").textContent = duration != null

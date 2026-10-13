@@ -160,6 +160,7 @@ async def run_analysis(
         event_risks.append(
             {
                 "event": event.get("event_type"),
+                "stage": kill_chain_correlator.classify_stage(event),
                 "user": event.get("user"),
                 "anomaly_probability": float(anomaly_prob),
                 "chi_square_probability": float(chi2_prob),

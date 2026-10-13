@@ -137,3 +137,41 @@ function baselineVsObservedSvg(rows) {
     <text class="haxis title" x="${W - 4}" y="${H - 6}" text-anchor="end">part du χ²</text>
   </svg>`;
 }
+
+// Donut of the number of events per priority. rows = [{label, value, color}]
+function donutSvg(rows, centerLabel) {
+  const data = rows.filter((r) => r.value > 0);
+  const total = data.reduce((a, r) => a + r.value, 0);
+  if (!total) return '<div class="empty">Aucun événement.</div>';
+
+  const S = 180, cx = S / 2, cy = S / 2, R = 78, r = 50;
+  let angle = -Math.PI / 2;
+  const point = (rad, a) => [cx + rad * Math.cos(a), cy + rad * Math.sin(a)];
+
+  const arcs = data.map((d) => {
+    const sweep = (d.value / total) * Math.PI * 2;
+    const full = data.length === 1;
+    const a0 = angle, a1 = angle + (full ? sweep - 0.0001 : sweep);
+    angle += sweep;
+    const [x0, y0] = point(R, a0), [x1, y1] = point(R, a1);
+    const [x2, y2] = point(r, a1), [x3, y3] = point(r, a0);
+    const large = sweep > Math.PI ? 1 : 0;
+    const path = `M${x0.toFixed(2)} ${y0.toFixed(2)} A${R} ${R} 0 ${large} 1 ${x1.toFixed(2)} ${y1.toFixed(2)} ` +
+      `L${x2.toFixed(2)} ${y2.toFixed(2)} A${r} ${r} 0 ${large} 0 ${x3.toFixed(2)} ${y3.toFixed(2)} Z`;
+    const tip = `${d.label} : ${d.value} événement(s) (${((d.value / total) * 100).toFixed(0)} %)`;
+    return `<path class="donut-seg" d="${path}" fill="${d.color}"><title>${esc(tip)}</title></path>`;
+  }).join("");
+
+  const legend = data.map((d) =>
+    `<li><i style="background:${d.color}"></i><span>${esc(d.label)}</span><b>${d.value}</b></li>`
+  ).join("");
+
+  return `<div class="donut">
+    <svg viewBox="0 0 ${S} ${S}" role="img" aria-label="Répartition des événements par priorité">
+      ${arcs}
+      <text class="donut-total" x="${cx}" y="${cy + 2}" text-anchor="middle">${total}</text>
+      <text class="donut-label" x="${cx}" y="${cy + 18}" text-anchor="middle">${esc(centerLabel || "événements")}</text>
+    </svg>
+    <ul class="donut-legend">${legend}</ul>
+  </div>`;
+}
