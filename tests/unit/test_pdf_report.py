@@ -147,3 +147,58 @@ def test_report_is_still_built_when_the_logo_is_missing(monkeypatch):
 
     assert pdf_report._logo() is None
     assert build_risk_report(_analysis()).startswith(b"%PDF")
+
+
+# ------------------------------------------------------------ loss histogram
+def test_analysis_exposes_the_loss_histogram_of_the_riskiest_event():
+    analysis = _analysis()
+    hist = analysis["loss_histogram"]
+    ale_max = max(r["annual_loss_expectancy"] for r in analysis["event_risks"])
+
+    assert hist["annual_loss_expectancy"] == pytest.approx(ale_max)
+    assert len(hist["edges"]) == len(hist["counts"]) + 1
+    assert hist["edges"] == sorted(hist["edges"])
+    assert sum(hist["counts"]) == hist["loss_years"] <= hist["total_years"]
+    assert hist["value_at_risk_95"] <= hist["value_at_risk_99"]
+    assert public_view(analysis)["loss_histogram"] == hist
+    assert "_ale_usd" not in hist
+
+
+def test_chi_square_exposes_per_category_detail():
+    chi = _analysis()["chi_square"]
+    cats = chi["categories"]
+
+    assert cats and all(c["expected"] > 0 for c in cats)
+    assert sum(c["contribution"] for c in cats) == pytest.approx(chi["chi2_statistic"])
+    assert sum(c["share"] for c in cats) == pytest.approx(1.0)
+    assert sum(c["observed"] for c in cats) == chi["n_observed"]
+
+
+def test_each_event_risk_carries_its_kill_chain_stage():
+    stages = {r["event"]: r["stage"] for r in _analysis()["event_risks"]}
+
+    assert stages["port_scan"] == "reconnaissance"
+    assert stages["file_access"] == "exfiltration"
+    assert stages["lateral_movement"] == "lateral_movement"
+
+
+def test_public_view_exposes_event_details_aligned_with_event_risks():
+    view = public_view(_analysis())
+
+    assert len(view["event_details"]) == len(view["event_risks"])
+    assert {"hostname", "threat_event_frequency", "recommended_controls"} <= set(
+        view["event_details"][0]
+    )
+
+
+def test_currency_can_be_chosen_per_analysis(monkeypatch):
+    from ai_service.risk.currency import get_display_currency
+
+    assert get_display_currency("usd").code == "USD"
+    assert get_display_currency("TND").symbol == "DT"
+    with pytest.raises(ValueError):
+        get_display_currency("EUR")
+
+    monkeypatch.setattr("config.settings.settings.display_currency", "TND", raising=False)
+    usd = asyncio.run(run_analysis(normal_count=30, seed=7, currency_code="USD"))
+    assert usd["currency"]["code"] == "USD" and usd["currency"]["rate_from_usd"] == 1.0

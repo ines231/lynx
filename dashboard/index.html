@@ -38,6 +38,26 @@
       </div>
     </header>
 
+    <section class="card controls" id="controls" aria-label="Paramètres de l'analyse">
+      <label>Événements normaux (baseline)
+        <span class="range"><input type="range" id="ctlCount" min="10" max="200" step="5" value="30"><output id="ctlCountOut">30</output></span>
+      </label>
+      <label>Seed
+        <input type="number" id="ctlSeed" min="0" placeholder="aléatoire" title="Même seed = mêmes chiffres (reproductible)">
+      </label>
+      <label>Devise
+        <select id="ctlCurrency"><option value="TND">DT (dinar)</option><option value="USD">$ (dollar)</option></select>
+      </label>
+      <label>Actualisation auto
+        <select id="ctlAuto"><option value="0">Désactivée</option><option value="30">30 s</option><option value="60">60 s</option></select>
+      </label>
+      <div class="ctl-actions">
+        <button type="button" class="primary" id="ctlRun">▶ Relancer l'analyse</button>
+        <button type="button" class="secondary" id="csvBtn" title="Exporter les événements affichés (CSV)">⤓ CSV</button>
+        <button type="button" class="secondary" id="themeBtn" title="Basculer thème clair / sombre">◐ Thème</button>
+      </div>
+    </section>
+
     <section id="overview" class="kpis">
       <article class="card kpi"><span>Événements d'attaque</span><strong id="kpiEvents">—</strong><small>Scénario analysé</small></article>
       <article class="card kpi"><span>Anomalies ML détectées</span><strong id="kpiAnomalies">—</strong><small id="anomalyRate">—</small><em class="kpi-note">Détection binaire du modèle</em></article>
@@ -74,6 +94,8 @@
           <div><span>VaR 95%</span><strong id="riskVar95">—</strong></div>
           <div><span>VaR 99%</span><strong id="riskVar99">—</strong></div>
         </div>
+        <h3 class="mini-title">Répartition des priorités</h3>
+        <div id="priorityDonut"></div>
         <div id="riskBars" class="bars"></div>
       </article>
 
@@ -83,8 +105,36 @@
           <span id="chainSummary" class="muted">—</span>
         </div>
         <div id="killchainStages" class="killchain"></div>
+        <div class="stage-detail" id="stageDetail">Clique sur une étape pour voir ses événements.</div>
         <div class="timeline-note" id="timelineNote">—</div>
       </article>
+    </section>
+
+    <section class="card" id="lossChart">
+      <div class="section-head">
+        <div><h2>Distribution des pertes annuelles</h2><p id="lossChartNote">Simulation Monte-Carlo FAIR de l'événement le plus exposé.</p></div>
+        <span class="status-chip" id="lossChartEvent">—</span>
+      </div>
+      <div id="lossHistogram"></div>
+      <div class="chart-legend">
+        <span><i class="lg lg-bar"></i>Années avec perte</span>
+        <span><i class="lg lg-ale"></i>ALE (perte attendue)</span>
+        <span><i class="lg lg-var95"></i>VaR 95 %</span>
+        <span><i class="lg lg-var99"></i>VaR 99 %</span>
+      </div>
+    </section>
+
+    <section class="card" id="baselineChart">
+      <div class="section-head">
+        <div><h2>Comportement observé vs baseline</h2><p id="baselineNote">Comptes par type d'événement, et part de chacun dans la statistique χ².</p></div>
+        <span class="status-chip" id="baselineChip">—</span>
+      </div>
+      <div id="baselineBars"></div>
+      <div class="chart-legend">
+        <span><i class="lg lg-exp"></i>Attendu (baseline)</span>
+        <span><i class="lg lg-bar"></i>Observé (scénario d'attaque)</span>
+        <span>★ type absent de la baseline</span>
+      </div>
     </section>
 
     <section class="card" id="feed">
@@ -92,9 +142,16 @@
         <div><h2>Event risk feed</h2><p>Priorisation par probabilité, perte attendue et traitement.</p></div>
         <span id="lastUpdate" class="muted">—</span>
       </div>
+      <div class="toolbar" id="feedToolbar">
+        <input type="search" id="feedSearch" placeholder="Rechercher (événement, utilisateur, traitement…)" aria-label="Rechercher dans les événements">
+        <select id="feedPriority" aria-label="Filtrer par priorité"><option value="">Toutes priorités</option></select>
+        <select id="feedStage" aria-label="Filtrer par étape kill chain"><option value="">Toutes étapes</option></select>
+        <button type="button" class="secondary small" id="feedReset">Réinitialiser</button>
+        <span class="muted" id="feedCount">—</span>
+      </div>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>Événement</th><th>Utilisateur</th><th>Anomalie</th><th title="p-value du test du chi² sur tout le scénario (identique pour chaque ligne)">p-value χ²</th><th>ALE</th><th>Priorité</th><th>Traitement</th></tr></thead>
+          <thead><tr><th>Événement</th><th>Utilisateur</th><th class="sortable" data-sort="anomaly_probability">Anomalie</th><th title="p-value du test du chi² sur tout le scénario (identique pour chaque ligne)">p-value χ²</th><th class="sortable" data-sort="annual_loss_expectancy">ALE</th><th class="sortable" data-sort="priority_rank">Priorité</th><th>Traitement</th></tr></thead>
           <tbody id="riskTable"><tr><td colspan="7" class="empty">Chargement…</td></tr></tbody>
         </table>
       </div>
@@ -132,6 +189,14 @@
     </section>
 
 
+    <section class="card" id="mitreMatrix">
+      <div class="section-head">
+        <div><h2>Matrice MITRE ATT&amp;CK</h2><p id="matrixNote">Tactiques ATT&amp;CK touchées par l'attaque ; chaque case est une technique détectée.</p></div>
+        <span class="status-chip" id="matrixChip">—</span>
+      </div>
+      <div id="matrixBody"></div>
+    </section>
+
     <section class="card" id="analysis">
       <div class="section-head">
         <div><h2>Investigation intelligence</h2><p>IOC, techniques MITRE et chronologie issus du rapport corrélé.</p></div>
@@ -159,6 +224,14 @@
     <footer>LYNX · Probabilistic Threat Hunting Platform · Dashboard intégré à FastAPI</footer>
   </main>
 </div>
+<aside id="eventDrawer" class="drawer hidden" aria-label="Détail de l'événement" role="dialog">
+  <div class="drawer-head">
+    <div><strong id="drawerTitle">—</strong><span id="drawerSub" class="muted"></span></div>
+    <button type="button" class="secondary small" id="drawerClose" aria-label="Fermer">✕</button>
+  </div>
+  <div id="drawerBody"></div>
+</aside>
+<script src="/dashboard/charts.js"></script>
 <script src="/dashboard/app.js"></script>
 </body>
 </html>

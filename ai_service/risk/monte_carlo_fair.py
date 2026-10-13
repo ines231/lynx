@@ -146,6 +146,12 @@ class MonteCarloFAIR:
             var_99 = 0.0
             expected_shortfall_95 = 0.0
 
+        # Histogram of the simulated annual losses (years with a loss), for the
+        # dashboard. The range stops a little above VaR 99 so that the heavy
+        # right tail does not flatten the chart; rarer, larger losses are
+        # counted in the last bin.
+        loss_histogram = self._histogram(positive_losses, var_99, len(loss_dist))
+
         return {
             "threat_event_frequency": float(tef),
             "vulnerability": float(vulnerability),
@@ -163,11 +169,29 @@ class MonteCarloFAIR:
 
             # Keep only a sample for API responses
             "loss_distribution": loss_dist.tolist()[:100],
+            "loss_histogram": loss_histogram,
 
             "recommendation": self._recommend_treatment(
                 annual_loss_expectancy,
                 var_95
             ),
+        }
+
+    @staticmethod
+    def _histogram(positive_losses, var_99, total_years, bins: int = 24):
+        """Counts of simulated loss years per amount range (empty if no loss)."""
+        if len(positive_losses) == 0 or var_99 <= 0:
+            return {"edges": [], "counts": [], "loss_years": 0,
+                    "total_years": int(total_years)}
+
+        upper = var_99 * 1.25
+        clipped = np.minimum(positive_losses, upper)
+        counts, edges = np.histogram(clipped, bins=bins, range=(0.0, upper))
+        return {
+            "edges": [float(e) for e in edges],
+            "counts": [int(c) for c in counts],
+            "loss_years": int(len(positive_losses)),
+            "total_years": int(total_years),
         }
 
     def _estimate_threat_event_frequency(

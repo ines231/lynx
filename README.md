@@ -90,7 +90,7 @@ Les paramètres (port, seuils, clés d'API de threat intelligence) se règlent p
 
 | Méthode | Route | Rôle |
 | --- | --- | --- |
-| GET | `/api/risk/analyze` | analyse complète ; renvoie un `analysis_id`. Paramètres : `normal_count`, `seed` (résultats reproductibles) |
+| GET | `/api/risk/analyze` | analyse complète ; renvoie un `analysis_id`. Paramètres : `normal_count` (5 à 500), `seed` (résultats reproductibles), `currency` (`TND` ou `USD`, remplace la devise configurée) |
 | GET | `/api/risk/report.pdf` | rapport PDF. `analysis_id` : PDF de l'analyse affichée (410 si expirée) ; sans identifiant : nouvelle analyse |
 | GET | `/api/mitre/status` | état de la base MITRE ATT&CK : source, version, nombre de techniques, fraîcheur |
 | POST | `/api/mitre/refresh` | relance le téléchargement des données ATT&CK en arrière-plan |
@@ -186,6 +186,22 @@ L'événement le plus exposé est l'accès à un fichier sensible (`C:\Data\Fina
 | Exfiltration | file_access | T1537 Transfer Data to Cloud Account |
 
 La technique de persistence vient de la description de l'événement (« Suspicious scheduled task created ») ; la correspondance est une aide à l'investigation, à valider par un analyste.
+
+## Dashboard interactif
+
+Le dashboard (`/dashboard-ui`) ne se contente pas d'afficher des chiffres :
+
+| Élément | Rôle |
+|---|---|
+| Distribution des pertes | histogramme Monte-Carlo FAIR de l'événement le plus exposé, avec ALE, VaR 95 % et VaR 99 % |
+| Observé vs baseline | comptes attendus et observés par type d'événement, et part de chacun dans la statistique du χ² |
+| Kill chain cliquable | un clic sur une étape liste ses événements |
+| Répartition des priorités | donut du nombre d'événements par priorité |
+| Matrice MITRE ATT&CK | 14 tactiques en colonnes, techniques détectées en surbrillance (lien vers la fiche officielle) |
+| Flux d'événements | recherche, filtres (priorité, étape), tri (anomalie, ALE, priorité) et panneau de détail au clic |
+| Paramètres | taille de la baseline, seed, devise DT / $, actualisation automatique (30 ou 60 s), export CSV des événements affichés, thème clair / sombre |
+
+Les graphiques sont des SVG écrits à la main (`dashboard/charts.js`) : aucune bibliothèque externe, le dashboard fonctionne hors ligne.
 
 ## Devise
 

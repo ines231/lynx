@@ -65,6 +65,28 @@ function renderBars(rows) {
   }).join("") || '<div class="empty">Aucune mesure disponible.</div>';
 }
 
+function renderLossChart(h) {
+  $("lossHistogram").innerHTML = lossHistogramSvg(h, currencySymbol);
+  $("lossChartEvent").textContent = h?.event ? `Événement : ${h.event}` : "—";
+  if (h && h.total_years) {
+    const share = ((h.loss_years / h.total_years) * 100).toFixed(1).replace(".", ",");
+    $("lossChartNote").textContent =
+      `${h.total_years.toLocaleString("fr-FR")} années simulées, dont ${share} % avec au moins une perte. ` +
+      `Les VaR portent sur les années avec perte ; au-delà de la dernière colonne, les pertes sont regroupées.`;
+  }
+}
+
+function renderBaselineChart(chi) {
+  const cats = chi?.categories || [];
+  $("baselineBars").innerHTML = baselineVsObservedSvg(cats);
+  if (!cats.length) return;
+  const top = [...cats].sort((a, b) => b.contribution - a.contribution)[0];
+  $("baselineChip").textContent = `χ² = ${Number(chi.chi2_statistic).toLocaleString("fr-FR", { maximumFractionDigits: 1 })}`;
+  $("baselineNote").textContent =
+    `« ${top.category} » explique à lui seul ${(top.share * 100).toFixed(0)} % de l'écart : ` +
+    `${top.observed} observé(s) pour ${Number(top.expected).toLocaleString("fr-FR", { maximumFractionDigits: 1 })} attendu(s).`;
+}
+
 function chiTitle(row, chi) {
   const score = typeof row.chi_square_probability === "number"
     ? ` · score 1 − p = ${pct(row.chi_square_probability)}` : "";
@@ -103,33 +125,199 @@ function renderChi(chi) {
   $("chiNote").textContent = parts.join(" ");
 }
 
-function renderRows(rows, chi) {
+// ---- event feed: search, filters, sorting, detail drawer ---------------------
+const PRIORITY_RANK = { CRITICAL: 5, HIGH: 4, MEDIUM: 3, LOW: 2, INFO: 1 };
+const feed = { rows: [], details: [], chi: null, sortKey: "annual_loss_expectancy", sortDir: -1 };
+
+function renderRows(rows, chi, details = []) {
+  feed.rows = rows.map((r, i) => ({
+    ...r,
+    _i: i,
+    priority_rank: PRIORITY_RANK[String(r.priority || "").toUpperCase()] || 0
+  }));
+  feed.details = details;
+  feed.chi = chi;
+
+  const fill = (id, label, values, fmt = (v) => v) => {
+    const el = $(id), current = el.value;
+    el.innerHTML = `<option value="">${label}</option>` +
+      values.map((v) => `<option value="${esc(v)}">${esc(fmt(v))}</option>`).join("");
+    if (values.includes(current)) el.value = current;
+  };
+  fill("feedPriority", "Toutes priorités",
+    [...new Set(feed.rows.map((r) => String(r.priority || "—")))]
+      .sort((a, b) => (PRIORITY_RANK[b] || 0) - (PRIORITY_RANK[a] || 0)));
+  fill("feedStage", "Toutes étapes",
+    STAGE_ORDER.filter((s) => feed.rows.some((r) => r.stage === s)), stageLabel);
+  applyFeed();
+}
+
+function applyFeed() {
+  const q = $("feedSearch").value.trim().toLowerCase();
+  const prio = $("feedPriority").value, stage = $("feedStage").value;
+  const key = feed.sortKey, dir = feed.sortDir;
+
+  const rows = feed.rows
+    .filter((r) => !prio || String(r.priority || "—") === prio)
+    .filter((r) => !stage || r.stage === stage)
+    .filter((r) => !q || [r.event, r.user, r.strategy, r.priority, stageLabel(r.stage)]
+      .some((v) => String(v || "").toLowerCase().includes(q)))
+    .sort((a, b) => dir * ((a[key] || 0) - (b[key] || 0)) || a._i - b._i);
+
+  document.querySelectorAll("th.sortable").forEach((th) => {
+    const active = th.dataset.sort === key;
+    th.classList.toggle("sorted", active);
+    th.dataset.arrow = active ? (dir < 0 ? " ▼" : " ▲") : "";
+  });
+  feed.view = rows;
+  $("feedCount").textContent = `${rows.length} / ${feed.rows.length} événement(s)`;
+
   const body = $("riskTable");
   if (!rows.length) {
-    body.innerHTML = '<tr><td colspan="7" class="empty">Aucun événement retourné.</td></tr>';
+    body.innerHTML = '<tr><td colspan="7" class="empty">Aucun événement ne correspond aux filtres.</td></tr>';
     return;
   }
-  body.innerHTML = rows.map(x => `<tr>
+  body.innerHTML = rows.map((x) => `<tr class="clickable" tabindex="0" data-i="${x._i}" title="Cliquer pour le détail">
     <td><strong>${esc(x.event)}</strong></td>
     <td>${esc(x.user || "—")}</td>
     <td>${pct(x.anomaly_probability)}</td>
-    <td title="${esc(chiTitle(x, chi))}">${fmtP(chi?.p_value)}</td>
+    <td title="${esc(chiTitle(x, feed.chi))}">${fmtP(feed.chi?.p_value)}</td>
     <td>${money(x.annual_loss_expectancy)}</td>
     <td><span class="priority ${priorityClass(x.priority)}">${esc(x.priority || "—")}</span></td>
     <td>${esc(x.strategy || "—")}</td>
   </tr>`).join("");
 }
 
-function renderKillChain(stages) {
-  const ordered = ["reconnaissance","exploitation","persistence","lateral_movement","exfiltration"];
-  $("killchainStages").innerHTML = ordered.map((s, i) => {
+function openDrawer(i) {
+  const r = feed.rows[i], d = feed.details[i] || {};
+  if (!r) return;
+  const kv = (label, value) => `<div><span>${esc(label)}</span><strong>${value}</strong></div>`;
+  const num = (v, n = 2) => typeof v === "number" ? v.toLocaleString("fr-FR", { maximumFractionDigits: n }) : "—";
+  const controls = (d.recommended_controls || r.recommended_controls || []);
+
+  $("drawerTitle").textContent = r.event || "Événement";
+  $("drawerSub").textContent = ` ${stageLabel(r.stage) || ""}`;
+  $("drawerBody").innerHTML = `
+    <div class="drawer-badges">
+      <span class="priority ${priorityClass(r.priority)}">${esc(r.priority || "—")}</span>
+      <span class="status-chip">${esc(r.strategy || "—")}</span>
+    </div>
+    <h4>Contexte</h4>
+    <div class="facts">
+      ${kv("Horodatage", esc(formatTimestamp(d.timestamp)))}
+      ${kv("Hôte", esc(d.hostname || "—"))}
+      ${kv("Utilisateur", esc(r.user || "—"))}
+      ${kv("IP source → destination", `${esc(d.source_ip || "—")} → ${esc(d.destination_ip || "—")}`)}
+    </div>
+    <h4>Risque (FAIR)</h4>
+    <div class="facts">
+      ${kv("Probabilité d'anomalie", pct(r.anomaly_probability))}
+      ${kv("Fréquence d'événement (TEF)", num(d.threat_event_frequency) + " / an")}
+      ${kv("Vulnérabilité", pct(d.vulnerability))}
+      ${kv("Fréquence de perte (LEF)", num(d.loss_event_frequency, 3) + " / an")}
+      ${kv("Perte probable par événement", money(d.probable_loss_magnitude))}
+      ${kv("ALE (perte annuelle attendue)", money(r.annual_loss_expectancy))}
+      ${kv("VaR 95 % / 99 %", `${money(r.value_at_risk_95)} / ${money(r.value_at_risk_99)}`)}
+      ${kv("Déficit attendu (ES 95 %)", money(d.expected_shortfall_95))}
+    </div>
+    <h4>Traitement recommandé</h4>
+    <p class="muted">${esc(d.implementation_timeline || "")}${d.target_ale ? ` · ALE cible : ${money(d.target_ale)}` : ""}</p>
+    <ul class="drawer-list">${controls.map((c) => `<li>${esc(c)}</li>`).join("") || "<li>Maintenir la surveillance.</li>"}</ul>`;
+  $("eventDrawer").classList.remove("hidden");
+  $("drawerClose").focus();
+}
+
+function closeDrawer() {
+  $("eventDrawer").classList.add("hidden");
+}
+
+function initFeed() {
+  ["feedSearch", "feedPriority", "feedStage"].forEach((id) =>
+    $(id).addEventListener(id === "feedSearch" ? "input" : "change", applyFeed));
+  $("feedReset").addEventListener("click", () => {
+    $("feedSearch").value = ""; $("feedPriority").value = ""; $("feedStage").value = "";
+    feed.sortKey = "annual_loss_expectancy"; feed.sortDir = -1;
+    applyFeed();
+  });
+  document.querySelectorAll("th.sortable").forEach((th) => th.addEventListener("click", () => {
+    const key = th.dataset.sort;
+    feed.sortDir = feed.sortKey === key ? -feed.sortDir : -1;
+    feed.sortKey = key;
+    applyFeed();
+  }));
+  $("riskTable").addEventListener("click", (e) => {
+    const tr = e.target.closest("tr[data-i]");
+    if (tr) openDrawer(Number(tr.dataset.i));
+  });
+  $("riskTable").addEventListener("keydown", (e) => {
+    const tr = e.target.closest("tr[data-i]");
+    if (tr && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); openDrawer(Number(tr.dataset.i)); }
+  });
+  $("drawerClose").addEventListener("click", closeDrawer);
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeDrawer(); });
+}
+
+const STAGE_ORDER = ["reconnaissance","exploitation","persistence","lateral_movement","exfiltration"];
+const PRIORITY_COLORS = {
+  CRITICAL: "#ff7a7a", HIGH: "#ff9c6b", MEDIUM: "#ffd779", LOW: "#7fe0ae", INFO: "#6e8bbd"
+};
+let selectedStage = null;
+let lastRows = [];
+
+function renderKillChain(stages, rows = lastRows) {
+  lastRows = rows;
+  $("killchainStages").innerHTML = STAGE_ORDER.map((s, i) => {
     const active = stages.includes(s);
-    return `<div class="stage ${active ? "active" : ""}">
-      <b>0${i+1}</b>
+    const inStage = rows.filter((r) => r.stage === s);
+    const sub = active
+      ? `Observé${inStage.length ? ` · ${inStage.length} évt` : ""}`
+      : "Non observé";
+    return `<button type="button" class="stage ${active ? "active" : ""} ${selectedStage === s ? "selected" : ""}"
+        data-stage="${s}" aria-pressed="${selectedStage === s}">
+      <b>0${i + 1}</b>
       <span>${stageLabel(s)}</span>
-      <small>${active ? "Observé" : "Non observé"}</small>
-    </div>`;
+      <small>${sub}</small>
+    </button>`;
   }).join("");
+
+  document.querySelectorAll("#killchainStages .stage").forEach((el) => {
+    el.addEventListener("click", () => {
+      selectedStage = selectedStage === el.dataset.stage ? null : el.dataset.stage;
+      renderKillChain(stages, rows);
+    });
+  });
+  renderStageDetail(rows);
+}
+
+function renderStageDetail(rows) {
+  const box = $("stageDetail");
+  if (!selectedStage) {
+    box.textContent = "Clique sur une étape pour voir ses événements.";
+    return;
+  }
+  const items = rows.filter((r) => r.stage === selectedStage);
+  if (!items.length) {
+    box.innerHTML = `<strong>${esc(stageLabel(selectedStage))}</strong> : aucun événement observé à cette étape.`;
+    return;
+  }
+  box.innerHTML = `<strong>${esc(stageLabel(selectedStage))}</strong> · ${items.length} événement(s)` +
+    `<ul>${items.map((r) => `<li><b>${esc(r.event)}</b> — ${esc(r.user || "—")} · ` +
+      `<span class="priority ${priorityClass(r.priority)}">${esc(r.priority || "—")}</span> · ` +
+      `ALE ${money(r.annual_loss_expectancy)}</li>`).join("")}</ul>`;
+}
+
+function renderPriorityDonut(rows) {
+  const counts = {};
+  rows.forEach((r) => {
+    const key = String(r.priority || "INFO").toUpperCase();
+    counts[key] = (counts[key] || 0) + 1;
+  });
+  const order = ["CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO"];
+  const keys = [...order.filter((k) => counts[k]), ...Object.keys(counts).filter((k) => !order.includes(k))];
+  $("priorityDonut").innerHTML = donutSvg(
+    keys.map((k) => ({ label: k, value: counts[k], color: PRIORITY_COLORS[k] || "#8593a8" })),
+    "événements"
+  );
 }
 
 function renderControls(controls) {
@@ -177,6 +365,16 @@ function renderTechniques(techniques) {
   $("mitreSource").textContent = source
     ? `Source : ${source} · correspondance automatique par recherche dans le catalogue officiel (survol : tactique, pertinence, termes).`
     : "";
+}
+
+function renderMatrix(techniques) {
+  const list = techniques || [];
+  $("matrixBody").innerHTML = attackMatrixHtml(list);
+  const tactics = new Set(list.flatMap((t) => t.tactics || []));
+  $("matrixChip").textContent = `${list.length} technique(s) · ${tactics.size} tactique(s)`;
+  $("matrixNote").textContent = list[0]?.source
+    ? `Source : ${list[0].source}. Clique sur une case pour ouvrir la fiche officielle de la technique.`
+    : "Tactiques ATT&CK touchées par l'attaque ; chaque case est une technique détectée.";
 }
 
 function showError(err) {
@@ -229,7 +427,79 @@ async function downloadReport() {
   }
 }
 
+// ---- analysis controls, auto-refresh, CSV export, theme ---------------------
+function analysisQuery() {
+  const q = new URLSearchParams({
+    normal_count: $("ctlCount").value,
+    currency: $("ctlCurrency").value
+  });
+  const seed = $("ctlSeed").value.trim();
+  if (seed !== "") q.set("seed", seed);
+  return q.toString();
+}
+
+let autoTimer = null;
+let loading = false;
+
+function setAutoRefresh() {
+  clearInterval(autoTimer);
+  autoTimer = null;
+  const seconds = Number($("ctlAuto").value);
+  if (seconds > 0) {
+    autoTimer = setInterval(() => { if (!document.hidden && !loading) load(); }, seconds * 1000);
+  }
+}
+
+const csvCell = (v) => {
+  let s = String(v ?? "");
+  // neutralise spreadsheet formulas (=, +, -, @) coming from event data
+  if (/^[=+\-@\t\r]/.test(s)) s = "'" + s;
+  return /[;"\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+};
+
+function exportCsv() {
+  const rows = feed.view || [];
+  if (!rows.length) return;
+  const code = $("ctlCurrency").value;
+  const header = ["evenement", "etape_kill_chain", "utilisateur", "probabilite_anomalie",
+    "p_value_chi2", `ALE_${code}`, `VaR95_${code}`, `VaR99_${code}`, "priorite", "traitement"];
+  // French spreadsheets expect a decimal comma
+  const dec = (v, n = 4) => typeof v === "number" ? v.toFixed(n).replace(".", ",") : "";
+  const lines = rows.map((r) => [
+    r.event, r.stage, r.user, dec(r.anomaly_probability), dec(feed.chi?.p_value, 5),
+    Math.round(r.annual_loss_expectancy), Math.round(r.value_at_risk_95),
+    Math.round(r.value_at_risk_99), r.priority, r.strategy
+  ].map(csvCell).join(";"));
+  const blob = new Blob(["\ufeff" + [header.join(";"), ...lines].join("\r\n")],
+    { type: "text/csv;charset=utf-8" });
+  const link = document.createElement("a");
+  link.href = URL.createObjectURL(blob);
+  link.download = `lynx-evenements-${currentAnalysisId || "analyse"}.csv`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+}
+
+function applyTheme(theme) {
+  document.documentElement.classList.toggle("light", theme === "light");
+  try { localStorage.setItem("lynx-theme", theme); } catch (e) { /* private mode */ }
+}
+
+function initControls() {
+  $("ctlCount").addEventListener("input", () => { $("ctlCountOut").textContent = $("ctlCount").value; });
+  $("ctlRun").addEventListener("click", load);
+  $("ctlCurrency").addEventListener("change", load);
+  $("ctlAuto").addEventListener("change", setAutoRefresh);
+  $("csvBtn").addEventListener("click", exportCsv);
+  $("themeBtn").addEventListener("click", () =>
+    applyTheme(document.documentElement.classList.contains("light") ? "dark" : "light"));
+  try { applyTheme(localStorage.getItem("lynx-theme") === "light" ? "light" : "dark"); } catch (e) { /* ignore */ }
+}
+
 async function load() {
+  if (loading) return;
+  loading = true;
   $("errorBox").classList.add("hidden");
   $("serviceBadge").textContent = "Analyse en cours…";
   $("serviceBadge").className = "status-chip";
@@ -237,7 +507,7 @@ async function load() {
 
   try {
     const [risk, anomaly, investigation, scenario] = await Promise.all([
-      get("/api/risk/analyze?normal_count=30"),
+      get("/api/risk/analyze?" + analysisQuery()),
       get("/api/anomalies/demo"),
       get("/api/investigations/full-demo"),
       get("/api/events/attack-scenario")
@@ -268,10 +538,9 @@ async function load() {
     $("kpiAttacks").textContent = risk.summary?.attacks_found ?? 0;
     $("kpiReports").textContent = (risk.summary?.reports_generated ?? 0) + " rapport(s) généré(s)";
     $("kpiALE").textContent = money(highest?.annual_loss_expectancy);
-    if (risk.currency && risk.currency.code !== "USD") {
-      $("kpiALEnote").textContent =
-        `Annual Loss Expectancy · 1 USD = ${Number(risk.currency.rate_from_usd).toFixed(4)} ${risk.currency.symbol}`;
-    }
+    $("kpiALEnote").textContent = risk.currency && risk.currency.code !== "USD"
+      ? `Annual Loss Expectancy · 1 USD = ${Number(risk.currency.rate_from_usd).toFixed(4)} ${risk.currency.symbol}`
+      : "Annual Loss Expectancy";
 
     $("riskPriority").textContent = highest?.priority || "—";
     $("riskProbability").textContent = pct(highest?.anomaly_probability);
@@ -280,9 +549,12 @@ async function load() {
     $("riskVar95").textContent = money(highest?.value_at_risk_95);
     $("riskVar99").textContent = money(highest?.value_at_risk_99);
 
+    renderLossChart(risk.loss_histogram);
+    renderBaselineChart(risk.chi_square);
     renderBars(rows);
-    renderRows(rows, risk.chi_square);
-    renderKillChain(stages);
+    renderRows(rows, risk.chi_square, risk.event_details || []);
+    renderKillChain(stages, rows);
+    renderPriorityDonut(rows);
 
     $("chainSummary").textContent = stages.length + "/5 étapes observées";
     $("timelineNote").textContent = duration != null
@@ -303,6 +575,7 @@ async function load() {
     renderControls(highest?.recommended_controls);
     renderIocs(report);
     renderTechniques(techniques);
+    renderMatrix(techniques);
 
     $("attackId").textContent = report?.attack_summary?.attack_id || "—";
     $("sourceIp").textContent = report?.attack_summary?.source_ip || "—";
@@ -317,6 +590,8 @@ async function load() {
   } catch (err) {
     console.error(err);
     showError(err);
+  } finally {
+    loading = false;
   }
 }
 
@@ -344,4 +619,6 @@ function renderInvestigationTimeline(timeline) {
 
 $("refreshBtn").addEventListener("click", load);
 $("pdfBtn").addEventListener("click", downloadReport);
+initFeed();
+initControls();
 load();

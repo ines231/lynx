@@ -73,9 +73,36 @@ async def _enrich_all(events) -> list:
     return enriched_events
 
 
+def _loss_histogram_view(event, index, risk_metrics, currency) -> Dict[str, Any]:
+    """Loss distribution of one event, amounts converted to the display currency."""
+    hist = risk_metrics.get("loss_histogram") or {}
+    return {
+        "_ale_usd": risk_metrics.get("annual_loss_expectancy", 0),
+        "event": event.get("event_type"),
+        "event_index": index,
+        "edges": [currency.convert(e) for e in hist.get("edges", [])],
+        "counts": list(hist.get("counts", [])),
+        "loss_years": hist.get("loss_years", 0),
+        "total_years": hist.get("total_years", 0),
+        "annual_loss_expectancy": currency.convert(
+            risk_metrics.get("annual_loss_expectancy", 0)
+        ),
+        "value_at_risk_95": currency.convert(risk_metrics.get("value_at_risk_95", 0)),
+        "value_at_risk_99": currency.convert(risk_metrics.get("value_at_risk_99", 0)),
+        "expected_shortfall_95": currency.convert(
+            risk_metrics.get("expected_shortfall_95", 0)
+        ),
+    }
+
+
+def _strip_private(view):
+    return {k: v for k, v in view.items() if not k.startswith("_")} if view else None
+
+
 async def run_analysis(
     normal_count: int = 30,
     seed: Optional[int] = None,
+    currency_code: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
     Run the full pipeline and return everything the API and the report need.
@@ -92,7 +119,7 @@ async def run_analysis(
 
     # The engine prices losses in USD; every amount that leaves the pipeline
     # is converted once into the display currency (TND by default).
-    currency = get_display_currency()
+    currency = get_display_currency(currency_code)
 
     # ---- 1. baseline ---------------------------------------------------
     normal_events = mock_wazuh.generate_events(
@@ -116,10 +143,17 @@ async def run_analysis(
 
     event_risks = []
     event_details = []
+    loss_histogram = None  # of the event with the highest ALE
 
-    for event in enriched_attack:
+    for index, event in enumerate(enriched_attack):
         anomaly_prob, _ = anomaly_probability.calculate_probability(event, baseline)
         risk_metrics = monte_carlo_fair.calculate_risk(event, anomaly_prob)
+        if loss_histogram is None or risk_metrics.get(
+            "annual_loss_expectancy", 0
+        ) > loss_histogram["_ale_usd"]:
+            loss_histogram = _loss_histogram_view(
+                event, index, risk_metrics, currency
+            )
         treatment = risk_treatment.recommend_treatment(risk_metrics, event)
 
         controls = treatment.get("recommended_controls", [])
@@ -127,6 +161,7 @@ async def run_analysis(
         event_risks.append(
             {
                 "event": event.get("event_type"),
+                "stage": kill_chain_correlator.classify_stage(event),
                 "user": event.get("user"),
                 "anomaly_probability": float(anomaly_prob),
                 "chi_square_probability": float(chi2_prob),
@@ -213,6 +248,7 @@ async def run_analysis(
         "events": enriched_attack,
         "event_risks": event_risks,
         "event_details": event_details,
+        "loss_histogram": _strip_private(loss_histogram),
         "chi_square": chi2_details,
         "attacks": attacks,
         "reports": reports,
@@ -237,6 +273,8 @@ def public_view(analysis: Dict[str, Any]) -> Dict[str, Any]:
         },
         "baseline": analysis["baseline"],
         "event_risks": analysis["event_risks"],
+        "event_details": analysis.get("event_details", []),
+        "loss_histogram": analysis.get("loss_histogram"),
         "chi_square": analysis["chi_square"],
         "attacks": len(analysis["attacks"]),
         "reports": len(analysis["reports"]),
