@@ -102,6 +102,7 @@ def _strip_private(view):
 async def run_analysis(
     normal_count: int = 30,
     seed: Optional[int] = None,
+    currency_code: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
     Run the full pipeline and return everything the API and the report need.
@@ -118,7 +119,7 @@ async def run_analysis(
 
     # The engine prices losses in USD; every amount that leaves the pipeline
     # is converted once into the display currency (TND by default).
-    currency = get_display_currency()
+    currency = get_display_currency(currency_code)
 
     # ---- 1. baseline ---------------------------------------------------
     normal_events = mock_wazuh.generate_events(

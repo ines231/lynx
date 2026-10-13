@@ -169,6 +169,7 @@ function applyFeed() {
     th.classList.toggle("sorted", active);
     th.dataset.arrow = active ? (dir < 0 ? " ▼" : " ▲") : "";
   });
+  feed.view = rows;
   $("feedCount").textContent = `${rows.length} / ${feed.rows.length} événement(s)`;
 
   const body = $("riskTable");
@@ -426,7 +427,79 @@ async function downloadReport() {
   }
 }
 
+// ---- analysis controls, auto-refresh, CSV export, theme ---------------------
+function analysisQuery() {
+  const q = new URLSearchParams({
+    normal_count: $("ctlCount").value,
+    currency: $("ctlCurrency").value
+  });
+  const seed = $("ctlSeed").value.trim();
+  if (seed !== "") q.set("seed", seed);
+  return q.toString();
+}
+
+let autoTimer = null;
+let loading = false;
+
+function setAutoRefresh() {
+  clearInterval(autoTimer);
+  autoTimer = null;
+  const seconds = Number($("ctlAuto").value);
+  if (seconds > 0) {
+    autoTimer = setInterval(() => { if (!document.hidden && !loading) load(); }, seconds * 1000);
+  }
+}
+
+const csvCell = (v) => {
+  let s = String(v ?? "");
+  // neutralise spreadsheet formulas (=, +, -, @) coming from event data
+  if (/^[=+\-@\t\r]/.test(s)) s = "'" + s;
+  return /[;"\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+};
+
+function exportCsv() {
+  const rows = feed.view || [];
+  if (!rows.length) return;
+  const code = $("ctlCurrency").value;
+  const header = ["evenement", "etape_kill_chain", "utilisateur", "probabilite_anomalie",
+    "p_value_chi2", `ALE_${code}`, `VaR95_${code}`, `VaR99_${code}`, "priorite", "traitement"];
+  // French spreadsheets expect a decimal comma
+  const dec = (v, n = 4) => typeof v === "number" ? v.toFixed(n).replace(".", ",") : "";
+  const lines = rows.map((r) => [
+    r.event, r.stage, r.user, dec(r.anomaly_probability), dec(feed.chi?.p_value, 5),
+    Math.round(r.annual_loss_expectancy), Math.round(r.value_at_risk_95),
+    Math.round(r.value_at_risk_99), r.priority, r.strategy
+  ].map(csvCell).join(";"));
+  const blob = new Blob(["\ufeff" + [header.join(";"), ...lines].join("\r\n")],
+    { type: "text/csv;charset=utf-8" });
+  const link = document.createElement("a");
+  link.href = URL.createObjectURL(blob);
+  link.download = `lynx-evenements-${currentAnalysisId || "analyse"}.csv`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+}
+
+function applyTheme(theme) {
+  document.documentElement.classList.toggle("light", theme === "light");
+  try { localStorage.setItem("lynx-theme", theme); } catch (e) { /* private mode */ }
+}
+
+function initControls() {
+  $("ctlCount").addEventListener("input", () => { $("ctlCountOut").textContent = $("ctlCount").value; });
+  $("ctlRun").addEventListener("click", load);
+  $("ctlCurrency").addEventListener("change", load);
+  $("ctlAuto").addEventListener("change", setAutoRefresh);
+  $("csvBtn").addEventListener("click", exportCsv);
+  $("themeBtn").addEventListener("click", () =>
+    applyTheme(document.documentElement.classList.contains("light") ? "dark" : "light"));
+  try { applyTheme(localStorage.getItem("lynx-theme") === "light" ? "light" : "dark"); } catch (e) { /* ignore */ }
+}
+
 async function load() {
+  if (loading) return;
+  loading = true;
   $("errorBox").classList.add("hidden");
   $("serviceBadge").textContent = "Analyse en cours…";
   $("serviceBadge").className = "status-chip";
@@ -434,7 +507,7 @@ async function load() {
 
   try {
     const [risk, anomaly, investigation, scenario] = await Promise.all([
-      get("/api/risk/analyze?normal_count=30"),
+      get("/api/risk/analyze?" + analysisQuery()),
       get("/api/anomalies/demo"),
       get("/api/investigations/full-demo"),
       get("/api/events/attack-scenario")
@@ -465,10 +538,9 @@ async function load() {
     $("kpiAttacks").textContent = risk.summary?.attacks_found ?? 0;
     $("kpiReports").textContent = (risk.summary?.reports_generated ?? 0) + " rapport(s) généré(s)";
     $("kpiALE").textContent = money(highest?.annual_loss_expectancy);
-    if (risk.currency && risk.currency.code !== "USD") {
-      $("kpiALEnote").textContent =
-        `Annual Loss Expectancy · 1 USD = ${Number(risk.currency.rate_from_usd).toFixed(4)} ${risk.currency.symbol}`;
-    }
+    $("kpiALEnote").textContent = risk.currency && risk.currency.code !== "USD"
+      ? `Annual Loss Expectancy · 1 USD = ${Number(risk.currency.rate_from_usd).toFixed(4)} ${risk.currency.symbol}`
+      : "Annual Loss Expectancy";
 
     $("riskPriority").textContent = highest?.priority || "—";
     $("riskProbability").textContent = pct(highest?.anomaly_probability);
@@ -518,6 +590,8 @@ async function load() {
   } catch (err) {
     console.error(err);
     showError(err);
+  } finally {
+    loading = false;
   }
 }
 
@@ -546,4 +620,5 @@ function renderInvestigationTimeline(timeline) {
 $("refreshBtn").addEventListener("click", load);
 $("pdfBtn").addEventListener("click", downloadReport);
 initFeed();
+initControls();
 load();

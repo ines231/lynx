@@ -135,3 +135,11 @@ def test_analyze_exposes_the_mitre_knowledge_base_used():
     assert data["mitre"]["technique_count"] > 0
     assert data["mitre"]["source"]
     assert data["currency"]["code"] in {"TND", "USD"}
+
+
+def test_analyze_accepts_a_currency_and_rejects_unknown_ones():
+    ok = client.get("/api/risk/analyze?normal_count=20&seed=7&currency=USD").json()
+    assert ok["currency"]["code"] == "USD"
+
+    assert client.get("/api/risk/analyze?currency=EUR").status_code == 422
+    assert client.get("/api/risk/analyze?normal_count=1").status_code == 422

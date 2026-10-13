@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, Response
+from fastapi import APIRouter, HTTPException, Query, Response
 from typing import Optional
 import logging
 import traceback
@@ -8,7 +8,7 @@ from ai_service.risk.anomaly_probability import anomaly_probability
 from ai_service.risk.chi_square_tests import chi_square_tests
 from ai_service.risk.monte_carlo_fair import monte_carlo_fair
 from ai_service.risk.risk_treatment import risk_treatment
-from ai_service.risk.currency import get_display_currency
+from ai_service.risk.currency import SUPPORTED_CODES, get_display_currency
 from ai_service.risk.pipeline import (
     NORMAL_EVENT_TYPES,
     analysis_store,
@@ -376,21 +376,31 @@ async def risk_engine_demo():
 
 @router.get("/analyze")
 async def analyze_with_risk_engine(
-    normal_count: int = 30,
-    seed: Optional[int] = None
+    normal_count: int = Query(30, ge=5, le=500),
+    seed: Optional[int] = None,
+    currency: Optional[str] = Query(None, description="TND ou USD (défaut : configuration)"),
 ):
     """
     Full risk analysis pipeline.
 
     `seed` makes the mock data (and therefore every figure) reproducible.
+    `currency` (TND or USD) overrides the configured display currency.
     The response carries an `analysis_id`: pass it to `/report.pdf` to download
     the report of exactly this analysis.
     """
 
+    if currency is not None and currency.upper() not in SUPPORTED_CODES:
+        raise HTTPException(
+            status_code=422,
+            detail=f"currency doit valoir l'une de : {', '.join(SUPPORTED_CODES)}",
+        )
+
     try:
         logger.info("=== RISK ANALYSIS START ===")
 
-        analysis = await run_analysis(normal_count=normal_count, seed=seed)
+        analysis = await run_analysis(
+            normal_count=normal_count, seed=seed, currency_code=currency
+        )
         analysis_store.put(analysis)
 
         logger.info("=== ANALYSIS COMPLETE ===")

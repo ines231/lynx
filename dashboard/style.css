@@ -163,3 +163,15 @@ tr.clickable{cursor:pointer}tr.clickable:hover td,tr.clickable:focus td{backgrou
 .drawer-head strong{font-size:17px;display:block}.drawer h4{font-size:12px;color:#8391a7;margin:18px 0 8px;text-transform:uppercase;letter-spacing:.5px}
 .drawer-badges{display:flex;gap:8px;align-items:center}
 .drawer-list{margin:8px 0 0;padding-left:18px;font-size:12px;color:#b7c2d1}.drawer-list li{margin:6px 0}
+
+/* controls + light theme */
+.controls{display:flex;flex-wrap:wrap;gap:16px 22px;align-items:flex-end;margin-bottom:18px;padding:16px 20px}
+.controls label{display:grid;gap:6px;color:#7f8ca0;font-size:11px;font-weight:700}
+.controls input,.controls select{background:#0a1019;border:1px solid #23344d;color:#e1e8f4;border-radius:8px;padding:8px 10px;font:inherit;font-size:12px}
+.controls input[type=number]{width:110px}
+.range{display:flex;align-items:center;gap:10px}.range input{padding:0;width:170px;accent-color:#5b7cff}.range output{min-width:30px;color:#e1e8f4;font-size:13px}
+.ctl-actions{display:flex;flex-wrap:wrap;gap:8px;margin-left:auto}
+/* light theme: invert the dark palette; media keeps their natural colours */
+html.light{filter:invert(1) hue-rotate(180deg)}
+html.light img,html.light svg .donut-seg{filter:invert(1) hue-rotate(180deg)}
+.content{min-width:0}

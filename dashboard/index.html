@@ -38,6 +38,26 @@
       </div>
     </header>
 
+    <section class="card controls" id="controls" aria-label="Paramètres de l'analyse">
+      <label>Événements normaux (baseline)
+        <span class="range"><input type="range" id="ctlCount" min="10" max="200" step="5" value="30"><output id="ctlCountOut">30</output></span>
+      </label>
+      <label>Seed
+        <input type="number" id="ctlSeed" min="0" placeholder="aléatoire" title="Même seed = mêmes chiffres (reproductible)">
+      </label>
+      <label>Devise
+        <select id="ctlCurrency"><option value="TND">DT (dinar)</option><option value="USD">$ (dollar)</option></select>
+      </label>
+      <label>Actualisation auto
+        <select id="ctlAuto"><option value="0">Désactivée</option><option value="30">30 s</option><option value="60">60 s</option></select>
+      </label>
+      <div class="ctl-actions">
+        <button type="button" class="primary" id="ctlRun">▶ Relancer l'analyse</button>
+        <button type="button" class="secondary" id="csvBtn" title="Exporter les événements affichés (CSV)">⤓ CSV</button>
+        <button type="button" class="secondary" id="themeBtn" title="Basculer thème clair / sombre">◐ Thème</button>
+      </div>
+    </section>
+
     <section id="overview" class="kpis">
       <article class="card kpi"><span>Événements d'attaque</span><strong id="kpiEvents">—</strong><small>Scénario analysé</small></article>
       <article class="card kpi"><span>Anomalies ML détectées</span><strong id="kpiAnomalies">—</strong><small id="anomalyRate">—</small><em class="kpi-note">Détection binaire du modèle</em></article>

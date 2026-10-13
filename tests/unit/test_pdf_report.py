@@ -189,3 +189,16 @@ def test_public_view_exposes_event_details_aligned_with_event_risks():
     assert {"hostname", "threat_event_frequency", "recommended_controls"} <= set(
         view["event_details"][0]
     )
+
+
+def test_currency_can_be_chosen_per_analysis(monkeypatch):
+    from ai_service.risk.currency import get_display_currency
+
+    assert get_display_currency("usd").code == "USD"
+    assert get_display_currency("TND").symbol == "DT"
+    with pytest.raises(ValueError):
+        get_display_currency("EUR")
+
+    monkeypatch.setattr("config.settings.settings.display_currency", "TND", raising=False)
+    usd = asyncio.run(run_analysis(normal_count=30, seed=7, currency_code="USD"))
+    assert usd["currency"]["code"] == "USD" and usd["currency"]["rate_from_usd"] == 1.0

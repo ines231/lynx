@@ -14,7 +14,7 @@ Configuration (environment variables or ``config/.env``):
 """
 
 from dataclasses import dataclass
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 from config.settings import settings
 
@@ -43,9 +43,18 @@ class Currency:
 USD = Currency(code="USD", symbol="$", rate_from_usd=1.0)
 
 
-def get_display_currency() -> Currency:
-    """Currency selected in the settings (read at call time, so tests can patch it)."""
-    code = str(getattr(settings, "display_currency", "TND")).upper()
+SUPPORTED_CODES = ("TND", "USD")
+
+
+def get_display_currency(code: Optional[str] = None) -> Currency:
+    """
+    Display currency: ``code`` if given (per-request choice made in the dashboard),
+    otherwise the one selected in the settings (read at call time, so tests can
+    patch it).
+    """
+    code = str(code or getattr(settings, "display_currency", "TND")).upper()
+    if code not in SUPPORTED_CODES:
+        raise ValueError(f"Unsupported currency {code!r} (use {', '.join(SUPPORTED_CODES)})")
 
     if code == "USD":
         return USD
