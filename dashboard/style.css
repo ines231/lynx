@@ -94,3 +94,4 @@ footer{padding:18px 0 4px;color:#526076;font-size:11px}
 .chi-note{margin:12px 0 0;color:#8a98ad;font-size:11px;line-height:1.55}
 @media(max-width:650px){.chi-grid{grid-template-columns:1fr 1fr}}
 
+.brand-logo{width:46px;height:auto;display:block;filter:drop-shadow(0 0 10px #7c4dff55)}

@@ -128,3 +128,22 @@ def test_pdf_shows_the_display_currency():
     pdf = build_risk_report({**analysis, "currency": {"code": "USD", "symbol": "$", "rate_from_usd": 1.0}})
     assert pdf.startswith(b"%PDF")
     assert pdf_report._money(1234) == "1 234 DT"
+
+
+# ------------------------------------------------------------ logo
+def test_logo_is_a_transparent_png_shipped_with_the_dashboard():
+    import os
+    from PIL import Image
+
+    path = os.path.normpath(pdf_report.LOGO_PATH)
+    assert os.path.exists(path)
+    with Image.open(path) as im:
+        assert im.mode == "RGBA"
+        assert im.getpixel((0, 0))[3] == 0  # corner is transparent, not white
+
+
+def test_report_is_still_built_when_the_logo_is_missing(monkeypatch):
+    monkeypatch.setattr(pdf_report, "LOGO_PATH", "/nonexistent/logo.png")
+
+    assert pdf_report._logo() is None
+    assert build_risk_report(_analysis()).startswith(b"%PDF")

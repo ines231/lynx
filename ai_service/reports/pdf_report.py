@@ -24,6 +24,7 @@ emoji, Greek letters).
 import contextvars
 import io
 import logging
+import os
 from datetime import datetime
 from typing import Any, Dict, Iterable, List, Optional, Sequence
 from xml.sax.saxutils import escape
@@ -37,6 +38,7 @@ from reportlab.lib.units import cm
 from reportlab.pdfgen import canvas
 from reportlab.platypus import (
     CondPageBreak,
+    Image,
     KeepTogether,
     Paragraph,
     SimpleDocTemplate,
@@ -466,6 +468,27 @@ class _NumberedCanvas(canvas.Canvas):
 
 
 # ------------------------------------------------------------------- sections
+LOGO_PATH = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), "..", "..", "dashboard", "assets", "lynx-logo.png"
+)
+
+
+def _logo(height: float = 3.1 * cm) -> Optional[Image]:
+    """The LYNX logo (transparent PNG) scaled to ``height``; None if the file is missing."""
+    path = os.path.normpath(LOGO_PATH)
+    if not os.path.exists(path):
+        return None
+    try:
+        from PIL import Image as PILImage
+
+        with PILImage.open(path) as im:
+            ratio = im.width / im.height
+        return Image(path, width=height * ratio, height=height, mask="auto")
+    except Exception:  # a broken logo must never break the report
+        logger.warning("LYNX logo could not be loaded: %s", path)
+        return None
+
+
 def _cover(analysis: Dict[str, Any], st: Dict[str, ParagraphStyle]) -> Table:
     params = analysis.get("parameters") or {}
     seed = params.get("seed")
@@ -478,29 +501,52 @@ def _cover(analysis: Dict[str, Any], st: Dict[str, ParagraphStyle]) -> Table:
         f"Graine : {_p(seed if seed is not None else 'aléatoire')}"
     )
 
-    block = Table(
+    logo = _logo()
+    logo_w = (logo.drawWidth + 0.6 * cm) if logo else 0
+    text_w = CONTENT_W - logo_w
+
+    title_block = Table(
         [
             [Paragraph("LYNX &nbsp;·&nbsp; PROBABILISTIC THREAT HUNTING", st["eyebrow"])],
             [Paragraph("Rapport d'analyse de risque<br/>et d'investigation", st["title"])],
             [Paragraph(
                 "Détection comportementale, quantification FAIR du risque "
                 "et aide à la décision.", st["subtitle"])],
-            [Spacer(1, 6)],
-            [Paragraph(meta, st["meta"])],
         ],
-        colWidths=[CONTENT_W],
+        colWidths=[text_w],
+        hAlign="LEFT",
+    )
+    title_block.setStyle(
+        TableStyle(
+            [
+                ("LEFTPADDING", (0, 0), (-1, -1), 0),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+                ("TOPPADDING", (0, 0), (-1, -1), 1),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 1),
+            ]
+        )
+    )
+
+    block = Table(
+        [
+            [title_block, logo or ""],
+            [Paragraph(meta, st["meta"]), ""],
+        ],
+        colWidths=[text_w, logo_w] if logo else [CONTENT_W, 0],
         hAlign="LEFT",
     )
     block.setStyle(
         TableStyle(
             [
                 ("BACKGROUND", (0, 0), (-1, -1), NAVY),
+                ("SPAN", (0, 1), (-1, 1)),
+                ("VALIGN", (0, 0), (-1, 0), "MIDDLE"),
                 ("LEFTPADDING", (0, 0), (-1, -1), 16),
                 ("RIGHTPADDING", (0, 0), (-1, -1), 16),
-                ("TOPPADDING", (0, 0), (0, 0), 16),
-                ("BOTTOMPADDING", (0, -1), (-1, -1), 14),
-                ("TOPPADDING", (0, 1), (-1, -2), 1),
-                ("BOTTOMPADDING", (0, 0), (-1, -2), 1),
+                ("TOPPADDING", (0, 0), (-1, 0), 16),
+                ("BOTTOMPADDING", (0, 0), (-1, 0), 8),
+                ("TOPPADDING", (0, 1), (-1, 1), 4),
+                ("BOTTOMPADDING", (0, 1), (-1, 1), 14),
             ]
         )
     )
