@@ -14,12 +14,12 @@
       <img class="brand-logo" src="/dashboard/assets/lynx-logo.png" alt="Logo LYNX">
       <div><strong>LYNX</strong><small>Threat Hunting</small></div>
     </div>
-    <nav>
-      <a class="active" href="#overview">Vue générale</a>
-      <a href="#risk">Analyse du risque</a>
-      <a href="#killchain">Kill chain</a>
-      <a href="#feed">Flux d'événements</a>
-      <a href="#investigation">Investigation</a>
+    <nav role="tablist" aria-label="Sections du dashboard">
+      <a class="active" href="#tab=overview" data-tab-link="overview" role="tab">Vue générale</a>
+      <a href="#tab=risk" data-tab-link="risk" role="tab">Analyse du risque</a>
+      <a href="#tab=mitre" data-tab-link="mitre" role="tab">MITRE ATT&amp;CK</a>
+      <a href="#tab=feed" data-tab-link="feed" role="tab">Flux d'événements</a>
+      <a href="#tab=investigation" data-tab-link="investigation" role="tab">Investigation</a>
     </nav>
     <div class="sidebar-foot"><span class="dot"></span> AI Service opérationnel</div>
   </aside>
@@ -37,6 +37,14 @@
         <button id="refreshBtn" class="primary">↻ Actualiser</button>
       </div>
     </header>
+
+    <nav class="tabstrip" aria-label="Sections du dashboard (mobile)">
+      <a href="#tab=overview" data-tab-link="overview">Vue générale</a>
+      <a href="#tab=risk" data-tab-link="risk">Risque</a>
+      <a href="#tab=mitre" data-tab-link="mitre">MITRE</a>
+      <a href="#tab=feed" data-tab-link="feed">Événements</a>
+      <a href="#tab=investigation" data-tab-link="investigation">Investigation</a>
+    </nav>
 
     <section class="card controls" id="controls" aria-label="Paramètres de l'analyse">
       <label>Événements normaux (baseline)
@@ -58,6 +66,8 @@
       </div>
     </section>
 
+
+    <div class="tab" id="tab-overview" data-tab="overview" role="tabpanel">
     <section id="overview" class="kpis">
       <article class="card kpi"><span>Événements d'attaque</span><strong id="kpiEvents">—</strong><small>Scénario analysé</small></article>
       <article class="card kpi"><span>Anomalies ML détectées</span><strong id="kpiAnomalies">—</strong><small id="anomalyRate">—</small><em class="kpi-note">Détection binaire du modèle</em></article>
@@ -109,7 +119,9 @@
         <div class="timeline-note" id="timelineNote">—</div>
       </article>
     </section>
+    </div>
 
+    <div class="tab" id="tab-risk" data-tab="risk" role="tabpanel">
     <section class="card" id="lossChart">
       <div class="section-head">
         <div><h2>Distribution des pertes annuelles</h2><p id="lossChartNote">Simulation Monte-Carlo FAIR de l'événement le plus exposé.</p></div>
@@ -136,7 +148,19 @@
         <span>★ type absent de la baseline</span>
       </div>
     </section>
+    </div>
 
+    <div class="tab" id="tab-mitre" data-tab="mitre" role="tabpanel">
+    <section class="card" id="mitreMatrix">
+      <div class="section-head">
+        <div><h2>Matrice MITRE ATT&amp;CK</h2><p id="matrixNote">Tactiques ATT&amp;CK touchées par l'attaque ; chaque case est une technique détectée.</p></div>
+        <span class="status-chip" id="matrixChip">—</span>
+      </div>
+      <div id="matrixBody"></div>
+    </section>
+    </div>
+
+    <div class="tab" id="tab-feed" data-tab="feed" role="tabpanel">
     <section class="card" id="feed">
       <div class="section-head">
         <div><h2>Event risk feed</h2><p>Priorisation par probabilité, perte attendue et traitement.</p></div>
@@ -156,7 +180,9 @@
         </table>
       </div>
     </section>
+    </div>
 
+    <div class="tab" id="tab-investigation" data-tab="investigation" role="tabpanel">
     <section class="grid two" id="investigation">
       <article class="card">
         <div class="section-head">
@@ -188,15 +214,6 @@
       </article>
     </section>
 
-
-    <section class="card" id="mitreMatrix">
-      <div class="section-head">
-        <div><h2>Matrice MITRE ATT&amp;CK</h2><p id="matrixNote">Tactiques ATT&amp;CK touchées par l'attaque ; chaque case est une technique détectée.</p></div>
-        <span class="status-chip" id="matrixChip">—</span>
-      </div>
-      <div id="matrixBody"></div>
-    </section>
-
     <section class="card" id="analysis">
       <div class="section-head">
         <div><h2>Investigation intelligence</h2><p>IOC, techniques MITRE et chronologie issus du rapport corrélé.</p></div>
@@ -219,6 +236,8 @@
       </div>
       <div id="timelineList" class="timeline-list"></div>
     </section>
+    </div>
+
 
     <div id="errorBox" class="error-box hidden"></div>
     <footer>LYNX · Probabilistic Threat Hunting Platform · Dashboard intégré à FastAPI</footer>

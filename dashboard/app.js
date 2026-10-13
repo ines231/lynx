@@ -497,6 +497,31 @@ function initControls() {
   try { applyTheme(localStorage.getItem("lynx-theme") === "light" ? "light" : "dark"); } catch (e) { /* ignore */ }
 }
 
+// ---- tabs (one section at a time, chosen from the menu) ----------------------
+const TABS = ["overview", "risk", "mitre", "feed", "investigation"];
+
+function showTab(name, { updateUrl = true } = {}) {
+  if (!TABS.includes(name)) name = "overview";
+  document.querySelectorAll(".tab").forEach((el) => el.classList.toggle("active", el.dataset.tab === name));
+  document.querySelectorAll("[data-tab-link]").forEach((el) => {
+    const on = el.dataset.tabLink === name;
+    el.classList.toggle("active", on);
+    el.setAttribute("aria-selected", String(on));
+  });
+  if (updateUrl) history.replaceState(null, "", "#tab=" + name);
+  try { localStorage.setItem("lynx-tab", name); } catch (e) { /* private mode */ }
+  window.scrollTo(0, 0);
+}
+
+function initTabs() {
+  document.querySelectorAll("[data-tab-link]").forEach((el) =>
+    el.addEventListener("click", (e) => { e.preventDefault(); showTab(el.dataset.tabLink); }));
+  const fromUrl = (location.hash.match(/^#tab=(\w+)/) || [])[1];
+  let saved = null;
+  try { saved = localStorage.getItem("lynx-tab"); } catch (e) { /* ignore */ }
+  showTab(fromUrl || saved || "overview", { updateUrl: false });
+}
+
 async function load() {
   if (loading) return;
   loading = true;
@@ -621,4 +646,5 @@ $("refreshBtn").addEventListener("click", load);
 $("pdfBtn").addEventListener("click", downloadReport);
 initFeed();
 initControls();
+initTabs();
 load();

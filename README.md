@@ -189,7 +189,7 @@ La technique de persistence vient de la description de l'événement (« Suspici
 
 ## Dashboard interactif
 
-Le dashboard (`/dashboard-ui`) ne se contente pas d'afficher des chiffres :
+Le dashboard (`/dashboard-ui`) est organisé en **onglets** choisis dans le menu (Vue générale, Analyse du risque, MITRE ATT&CK, Flux d'événements, Investigation) ; l'onglet actif est mémorisé. Il ne se contente pas d'afficher des chiffres :
 
 | Élément | Rôle |
 |---|---|
