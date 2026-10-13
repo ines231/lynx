@@ -37,6 +37,10 @@ class Settings(BaseSettings):
     ollama_host: str = "http://localhost:11434"
     ollama_model: str = "mistral"
     
+    # Display currency of the risk figures (FAIR engine prices in USD)
+    display_currency: str = "TND"      # "TND" or "USD"
+    usd_to_tnd_rate: float = 2.9927    # dinars for 1 USD (12/10/2026, to be updated)
+
     # Feature extraction
     baseline_days: int = 90
     anomaly_threshold: float = 3.0

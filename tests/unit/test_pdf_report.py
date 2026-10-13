@@ -1,3 +1,4 @@
+import pytest
 import asyncio
 
 from ai_service.reports import pdf_report
@@ -91,3 +92,39 @@ def test_numbers_use_french_separators():
 def test_text_is_made_safe_for_the_built_in_font():
     assert pdf_report._clean("a → b ✓ 🚨 é") == "a -> b OK  é"
     assert pdf_report._clean(None) == ""
+
+
+# ------------------------------------------------------------ currency (TND)
+def test_amounts_are_converted_to_dinars_at_the_configured_rate(monkeypatch):
+    from config.settings import settings
+
+    monkeypatch.setattr(settings, "display_currency", "USD")
+    usd = asyncio.run(run_analysis(normal_count=30, seed=7))
+
+    monkeypatch.setattr(settings, "display_currency", "TND")
+    monkeypatch.setattr(settings, "usd_to_tnd_rate", 3.0)
+    tnd = asyncio.run(run_analysis(normal_count=30, seed=7))
+
+    assert usd["currency"]["code"] == "USD"
+    assert tnd["currency"] == {"code": "TND", "symbol": "DT", "rate_from_usd": 3.0}
+
+    for before, after in zip(usd["event_risks"], tnd["event_risks"]):
+        assert after["annual_loss_expectancy"] == pytest.approx(
+            before["annual_loss_expectancy"] * 3.0
+        )
+        assert after["value_at_risk_95"] == pytest.approx(before["value_at_risk_95"] * 3.0)
+        # probabilities are not money: they must not be converted
+        assert after["anomaly_probability"] == before["anomaly_probability"]
+
+    assert public_view(tnd)["currency"]["symbol"] == "DT"
+
+
+def test_pdf_shows_the_display_currency():
+    analysis = _analysis()
+    assert analysis["currency"]["code"] == "TND"
+
+    assert pdf_report._money(1234) == "1 234 DT"
+    # the symbol comes from the analysis, and does not leak between reports
+    pdf = build_risk_report({**analysis, "currency": {"code": "USD", "symbol": "$", "rate_from_usd": 1.0}})
+    assert pdf.startswith(b"%PDF")
+    assert pdf_report._money(1234) == "1 234 DT"

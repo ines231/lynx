@@ -1,8 +1,12 @@
 const API = window.location.origin;
 const $ = (id) => document.getElementById(id);
 
+// Amounts come from the API already converted into the display currency
+// (TND by default); the symbol is set from the response in load().
+let currencySymbol = "DT";
+
 const money = (v) => typeof v === "number"
-  ? "$" + v.toLocaleString(undefined, { maximumFractionDigits: 0 })
+  ? v.toLocaleString("fr-FR", { maximumFractionDigits: 0 }) + "\u00a0" + currencySymbol
   : (v ?? "—");
 
 const pct = (v) => typeof v === "number"
@@ -216,6 +220,7 @@ async function load() {
       get("/api/events/attack-scenario")
     ]);
 
+    currencySymbol = risk.currency?.symbol || "DT";
     currentAnalysisId = risk.analysis_id || null;
     setPdfState("⤓ Rapport PDF", !currentAnalysisId);
 
@@ -240,6 +245,10 @@ async function load() {
     $("kpiAttacks").textContent = risk.summary?.attacks_found ?? 0;
     $("kpiReports").textContent = (risk.summary?.reports_generated ?? 0) + " rapport(s) généré(s)";
     $("kpiALE").textContent = money(highest?.annual_loss_expectancy);
+    if (risk.currency && risk.currency.code !== "USD") {
+      $("kpiALEnote").textContent =
+        `Annual Loss Expectancy · 1 USD = ${Number(risk.currency.rate_from_usd).toFixed(4)} ${risk.currency.symbol}`;
+    }
 
     $("riskPriority").textContent = highest?.priority || "—";
     $("riskProbability").textContent = pct(highest?.anomaly_probability);

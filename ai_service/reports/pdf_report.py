@@ -21,6 +21,7 @@ text goes through ``_clean`` which keeps the characters Helvetica can draw
 emoji, Greek letters).
 """
 
+import contextvars
 import io
 import logging
 from datetime import datetime
@@ -122,9 +123,12 @@ def _num(value: Any, decimals: int = 0) -> str:
     return text.replace(",", " ").replace(".", ",")
 
 
+_CURRENCY_SYMBOL = contextvars.ContextVar("lynx_currency_symbol", default="DT")
+
+
 def _money(value: Any) -> str:
     text = _num(value, 0)
-    return text if text == "-" else f"{text} $"
+    return text if text == "-" else f"{text}\u00a0{_CURRENCY_SYMBOL.get()}"
 
 
 def _pct(value: Any, decimals: int = 1) -> str:
@@ -599,7 +603,18 @@ def _section_summary(analysis, st) -> List[Any]:
     return story
 
 
-def _section_method(st) -> List[Any]:
+def _currency_sentence(analysis: Dict[str, Any]) -> str:
+    cur = analysis.get("currency") or {}
+    if not cur or cur.get("code") == "USD":
+        return " Montants exprimés en dollars américains."
+    return (
+        f" Montants exprimés en {_clean(cur.get('code'))} ({_clean(cur.get('symbol'))}) : "
+        f"le moteur valorise les pertes en dollars américains, convertis au taux de "
+        f"1 USD = {_num(cur.get('rate_from_usd'), 4)} {_clean(cur.get('symbol'))}."
+    )
+
+
+def _section_method(analysis, st) -> List[Any]:
     sims = getattr(chi_square_tests, "n_simulations", 10000)
     alpha = getattr(chi_square_tests, "p_value_threshold", 0.05)
     return [
@@ -633,7 +648,8 @@ def _section_method(st) -> List[Any]:
             "d'événement de perte ; elle est combinée à l'amplitude de perte probable "
             "dans une simulation de Monte Carlo. On en déduit la perte annuelle "
             "attendue (ALE), la valeur à risque à 95 % et 99 % (VaR) et la perte "
-            "moyenne au-delà de la VaR 95 % (expected shortfall).", st["body"]),
+            "moyenne au-delà de la VaR 95 % (expected shortfall)." + _currency_sentence(analysis),
+            st["body"]),
         Paragraph(
             "<b>Kill chain et investigation.</b> Les événements sont classés par étape "
             "(reconnaissance, exploitation, persistence, mouvement latéral, "
@@ -1014,6 +1030,8 @@ def _section_limits(analysis, st) -> List[Any]:
         "simulation lorsque les effectifs attendus sont faibles.",
         "Le score « 1 - p » exprime la force de la preuve contre H0 ; il ne doit pas "
         "être lu comme une probabilité d'attaque.",
+        "Le taux de change est fixe (paramètre de configuration), non actualisé "
+        "automatiquement : il doit être aligné sur le taux de la Banque centrale.",
         "Les paramètres FAIR (fréquences, vulnérabilité, amplitude de perte) sont des "
         "valeurs par défaut non calibrées sur le contexte métier : l'ALE et la VaR "
         "sont des ordres de grandeur pour prioriser, pas des montants budgétaires.",
@@ -1025,7 +1043,7 @@ def _section_limits(analysis, st) -> List[Any]:
 
 
 # ------------------------------------------------------------------ entry point
-def build_risk_report(analysis: Dict[str, Any]) -> bytes:
+def _render(analysis: Dict[str, Any]) -> bytes:
     """Render the analysis as a PDF and return its bytes."""
     st = _styles()
     buffer = io.BytesIO()
@@ -1051,7 +1069,7 @@ def build_risk_report(analysis: Dict[str, Any]) -> bytes:
     story: List[Any] = [_cover(analysis, st), Spacer(1, 6)]
     for section in (
         lambda: _section_summary(analysis, st),
-        lambda: _section_method(st),
+        lambda: _section_method(analysis, st),
         lambda: _section_chi(analysis, st),
         lambda: _section_events(analysis, st),
         lambda: _section_treatment(analysis, st),
@@ -1065,3 +1083,14 @@ def build_risk_report(analysis: Dict[str, Any]) -> bytes:
 
     document.build(story, canvasmaker=Canvas)
     return buffer.getvalue()
+
+
+
+def build_risk_report(analysis: Dict[str, Any]) -> bytes:
+    """Render the analysis as a PDF and return its bytes."""
+    symbol = _clean((analysis.get("currency") or {}).get("symbol") or "DT")
+    token = _CURRENCY_SYMBOL.set(symbol)
+    try:
+        return _render(analysis)
+    finally:
+        _CURRENCY_SYMBOL.reset(token)

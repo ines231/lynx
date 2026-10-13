@@ -18,6 +18,7 @@ from ai_service.risk.anomaly_probability import anomaly_probability
 from ai_service.risk.chi_square_tests import chi_square_tests
 from ai_service.risk.monte_carlo_fair import monte_carlo_fair
 from ai_service.risk.risk_treatment import risk_treatment
+from ai_service.risk.currency import get_display_currency
 
 from ai_service.connectors.wazuh.mock_wazuh import mock_wazuh
 from ai_service.enrichment.enrichment_service import enrichment_service
@@ -88,6 +89,10 @@ async def run_analysis(
     if seed is not None:
         random.seed(seed)
 
+    # The engine prices losses in USD; every amount that leaves the pipeline
+    # is converted once into the display currency (TND by default).
+    currency = get_display_currency()
+
     # ---- 1. baseline ---------------------------------------------------
     normal_events = mock_wazuh.generate_events(
         count=normal_count, event_types=NORMAL_EVENT_TYPES
@@ -124,11 +129,15 @@ async def run_analysis(
                 "user": event.get("user"),
                 "anomaly_probability": float(anomaly_prob),
                 "chi_square_probability": float(chi2_prob),
-                "annual_loss_expectancy": float(
+                "annual_loss_expectancy": currency.convert(
                     risk_metrics.get("annual_loss_expectancy", 0)
                 ),
-                "value_at_risk_95": float(risk_metrics.get("value_at_risk_95", 0)),
-                "value_at_risk_99": float(risk_metrics.get("value_at_risk_99", 0)),
+                "value_at_risk_95": currency.convert(
+                    risk_metrics.get("value_at_risk_95", 0)
+                ),
+                "value_at_risk_99": currency.convert(
+                    risk_metrics.get("value_at_risk_99", 0)
+                ),
                 "priority": treatment.get("priority"),
                 "strategy": treatment.get("treatment_strategy"),
                 "recommended_controls": controls[:2],
@@ -149,18 +158,18 @@ async def run_analysis(
                 "loss_event_frequency": float(
                     risk_metrics.get("loss_event_frequency", 0)
                 ),
-                "probable_loss_magnitude": float(
+                "probable_loss_magnitude": currency.convert(
                     risk_metrics.get("probable_loss_magnitude", 0)
                 ),
                 "probability_of_loss": float(
                     risk_metrics.get("probability_of_loss", 0)
                 ),
-                "expected_shortfall_95": float(
+                "expected_shortfall_95": currency.convert(
                     risk_metrics.get("expected_shortfall_95", 0)
                 ),
                 "implementation_timeline": treatment.get("implementation_timeline"),
                 "recommended_controls": list(controls[:5]),
-                "target_ale": float(
+                "target_ale": currency.convert(
                     (treatment.get("risk_metrics") or {}).get(
                         "target_annual_loss_expectancy", 0
                     )
@@ -185,6 +194,7 @@ async def run_analysis(
         "analysis_id": uuid.uuid4().hex[:12],
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "parameters": {"normal_count": normal_count, "seed": seed},
+        "currency": currency.to_dict(),
         "baseline": {
             "user": baseline.get("user"),
             "event_count": baseline.get("event_count"),
@@ -210,6 +220,7 @@ def public_view(analysis: Dict[str, Any]) -> Dict[str, Any]:
         "analysis_id": analysis["analysis_id"],
         "generated_at": analysis["generated_at"],
         "parameters": analysis["parameters"],
+        "currency": analysis["currency"],
         "summary": {
             "total_events": len(analysis["events"]),
             "attacks_found": len(analysis["attacks"]),

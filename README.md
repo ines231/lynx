@@ -142,21 +142,32 @@ Analyse reproductible : `GET /api/risk/analyze?seed=7` (baseline de 30 événeme
 
 Les types `port_scan`, `privilege_escalation`, `service_installation` et `lateral_movement` n'existent pas dans la baseline : ce sont eux qui font rejeter H0.
 
-**Risque par événement**
+**Risque par événement** (montants en dinars tunisiens, 1 USD = 2,9927 DT)
 
 | # | Événement | Utilisateur | Anomalie | ALE | VaR 95 % | VaR 99 % | Priorité |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| 1 | port_scan | n/a | 45,2 % | 145 $ | 8 176 $ | 10 517 $ | INFO |
-| 2 | port_scan | n/a | 45,2 % | 145 $ | 8 176 $ | 10 517 $ | INFO |
-| 3 | port_scan | n/a | 45,2 % | 259 $ | 8 295 $ | 12 173 $ | INFO |
-| 4 | privilege_escalation | user1 | 35,2 % | 2 133 $ | 52 894 $ | 71 718 $ | INFO |
-| 5 | service_installation | admin | 37,7 % | 617 $ | 33 768 $ | 41 885 $ | INFO |
-| 6 | lateral_movement | admin | 57,7 % | 4 529 $ | 52 316 $ | 69 264 $ | INFO |
-| 7 | file_access | service_account | 32,6 % | 5 847 $ | 246 068 $ | 365 547 $ | **CRITICAL** |
+| 1 | port_scan | n/a | 45,2 % | 434 DT | 24 469 DT | 31 473 DT | INFO |
+| 2 | port_scan | n/a | 45,2 % | 434 DT | 24 469 DT | 31 473 DT | INFO |
+| 3 | port_scan | n/a | 45,2 % | 775 DT | 24 825 DT | 36 430 DT | INFO |
+| 4 | privilege_escalation | user1 | 35,2 % | 6 384 DT | 158 296 DT | 214 631 DT | INFO |
+| 5 | service_installation | admin | 37,7 % | 1 847 DT | 101 056 DT | 125 350 DT | INFO |
+| 6 | lateral_movement | admin | 57,7 % | 13 554 DT | 156 567 DT | 207 287 DT | INFO |
+| 7 | file_access | service_account | 32,6 % | 17 497 DT | 736 409 DT | 1 093 973 DT | **CRITICAL** |
 
-L'événement le plus exposé est l'accès à un fichier sensible (`C:\Data\Financial\reports.xlsx`) par un compte de service : **remédiation urgente, délai inférieur à 4 heures**, avec pour objectif une ALE ramenée de 5 847 $ à 877 $ (−85 %).
+L'événement le plus exposé est l'accès à un fichier sensible (`C:\Data\Financial\reports.xlsx`) par un compte de service : **remédiation urgente, délai inférieur à 4 heures**, avec pour objectif une ALE ramenée de 17 497 DT à 2 625 DT (−85 %).
 
 **Corrélation.** Une attaque reconstituée (gravité *high*, confiance 78,6 %, source 192.168.1.50), 4 étapes sur 5 de la kill chain observées, 3 techniques MITRE (T1046, T1548, T1570), 8 hypothèses de chasse.
+
+## Devise
+
+Le moteur FAIR valorise les pertes en dollars américains (ses valeurs par défaut sont en USD). Tous les montants affichés (API, dashboard, PDF) sont convertis **une seule fois, à la sortie du pipeline**, en **dinars tunisiens (DT)** par défaut. Le taux est configurable :
+
+```bash
+DISPLAY_CURRENCY=TND        # ou USD pour garder les dollars
+USD_TO_TND_RATE=2.9927      # dinars pour 1 dollar (12/10/2026) : à aligner sur le taux de la BCT
+```
+
+La réponse de `/api/risk/analyze` contient la devise utilisée (`currency`). Le taux est fixe : il n'est pas actualisé automatiquement.
 
 ## Rapport PDF
 
@@ -188,6 +199,7 @@ pytest -q
 
 - **Données simulées.** Wazuh et IntelOwl sont remplacés par des générateurs (`mock_wazuh`, `mock_intelowl`). Aucun flux de production n'est branché.
 - **Échantillon réduit.** La baseline compte 30 événements et la fenêtre testée 7 : la puissance statistique est limitée, d'où la p-value estimée par simulation.
+- **Taux de change fixe.** La conversion USD → DT utilise un taux configuré à la main, pas un cours en direct.
 - **Paramètres FAIR non calibrés.** Fréquences, vulnérabilité et amplitude de perte sont des valeurs par défaut. L'ALE et la VaR donnent un ordre de grandeur pour prioriser, pas un budget.
 - **Seuils de priorité.** La priorité dépend de seuils sur l'ALE : dans l'exemple ci-dessus, l'escalade de privilèges et le mouvement latéral restent classés « INFO / acceptation » alors qu'ils appartiennent à une attaque en cours. À corriger en tenant compte de l'étape de la kill chain.
 - **Pas de LSTM ni de couche Ollama.** Ces pistes figuraient dans la première version du projet : le dossier `ai_service/llm/` est vide et `tensorflow` et `ollama` sont listés dans `requirements.txt` sans être utilisés par le code. L'analyse repose sur la baseline statistique, le chi-carré, l'Isolation Forest et FAIR.
