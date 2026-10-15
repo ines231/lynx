@@ -143,3 +143,18 @@ def test_analyze_accepts_a_currency_and_rejects_unknown_ones():
 
     assert client.get("/api/risk/analyze?currency=EUR").status_code == 422
     assert client.get("/api/risk/analyze?normal_count=1").status_code == 422
+
+
+def test_analyze_source_parameter_and_real_source_errors(monkeypatch, tmp_path):
+    from config.settings import settings
+
+    simulated = client.get("/api/risk/analyze?seed=7").json()
+    assert simulated["data_source"]["is_real"] is False
+
+    assert client.get("/api/risk/analyze?source=wazuh").status_code == 422
+
+    # real sensors, but no sensor file: a clear 503, not a 500
+    monkeypatch.setattr(settings, "falco_events_file", str(tmp_path / "none.json"))
+    monkeypatch.setattr(settings, "suricata_eve_file", str(tmp_path / "none2.json"))
+    missing = client.get("/api/risk/analyze?source=sensors")
+    assert missing.status_code == 503 and "Falco" in missing.json()["detail"]

@@ -21,26 +21,13 @@ from ai_service.risk.risk_treatment import risk_treatment
 from ai_service.risk.currency import get_display_currency
 from ai_service.mitre.knowledge_base import mitre_kb
 
-from ai_service.connectors.wazuh.mock_wazuh import mock_wazuh
+from ai_service.connectors.sources import NORMAL_EVENT_TYPES, get_source  # noqa: F401
 from ai_service.enrichment.enrichment_service import enrichment_service
 from ai_service.correlation.kill_chain import kill_chain_correlator
 from ai_service.reports.investigation_report import report_generator
 from ai_service.hypotheses.hypothesis_generator import hypothesis_generator
 
 logger = logging.getLogger(__name__)
-
-# The baseline must describe NORMAL behaviour. generate_events() draws from all
-# event types by default, including port_scan, privilege_escalation and
-# lateral_movement, which polluted the "normal" baseline with attack events and
-# made the chi-square test unable to tell the attack scenario apart.
-NORMAL_EVENT_TYPES = [
-    "login",
-    "process_execution",
-    "file_access",
-    "network_connection",
-    "dns_query",
-]
-
 
 def model_to_dict(model: Any) -> Dict[str, Any]:
     """Convert Pydantic v1/v2 models to dictionaries."""
@@ -103,6 +90,8 @@ async def run_analysis(
     normal_count: int = 30,
     seed: Optional[int] = None,
     currency_code: Optional[str] = None,
+    source: Optional[str] = None,
+    window_hours: Optional[float] = None,
 ) -> Dict[str, Any]:
     """
     Run the full pipeline and return everything the API and the report need.
@@ -122,14 +111,15 @@ async def run_analysis(
     currency = get_display_currency(currency_code)
 
     # ---- 1. baseline ---------------------------------------------------
-    normal_events = mock_wazuh.generate_events(
-        count=normal_count, event_types=NORMAL_EVENT_TYPES
-    )
+    event_source = get_source(source)
+    # same order as always (baseline, then scenario): with the mock source a seed
+    # must keep giving the same figures.
+    normal_events = await event_source.baseline_events(normal_count, window_hours)
     enriched_normal = await _enrich_all(normal_events)
     baseline = baseline_model.build_user_baseline("analysis_user", enriched_normal)
 
     # ---- 2. attack scenario -------------------------------------------
-    enriched_attack = await _enrich_all(mock_wazuh.generate_attack_scenario())
+    enriched_attack = await _enrich_all(await event_source.attack_events(window_hours))
 
     # ---- 3. risk -------------------------------------------------------
     # Chi-square is a distribution test, so it is computed on the complete
@@ -230,6 +220,7 @@ async def run_analysis(
         "analysis_id": uuid.uuid4().hex[:12],
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "parameters": {"normal_count": normal_count, "seed": seed},
+        "data_source": event_source.describe(),
         "currency": currency.to_dict(),
         "mitre": {
             "source": mitre_kb.source_label(),
@@ -263,6 +254,7 @@ def public_view(analysis: Dict[str, Any]) -> Dict[str, Any]:
         "analysis_id": analysis["analysis_id"],
         "generated_at": analysis["generated_at"],
         "parameters": analysis["parameters"],
+        "data_source": analysis.get("data_source"),
         "currency": analysis["currency"],
         "mitre": analysis["mitre"],
         "summary": {

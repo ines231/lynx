@@ -9,6 +9,7 @@ from ai_service.risk.chi_square_tests import chi_square_tests
 from ai_service.risk.monte_carlo_fair import monte_carlo_fair
 from ai_service.risk.risk_treatment import risk_treatment
 from ai_service.risk.currency import SUPPORTED_CODES, get_display_currency
+from ai_service.connectors.sources import SOURCE_NAMES, SourceError
 from ai_service.risk.pipeline import (
     NORMAL_EVENT_TYPES,
     analysis_store,
@@ -379,12 +380,15 @@ async def analyze_with_risk_engine(
     normal_count: int = Query(30, ge=5, le=500),
     seed: Optional[int] = None,
     currency: Optional[str] = Query(None, description="TND ou USD (défaut : configuration)"),
+    source: Optional[str] = Query(None, description="mock (simulé) ou sensors (alertes réelles Falco/Suricata)"),
+    window_hours: Optional[float] = Query(None, gt=0, le=720, description="fenêtre analysée (sources réelles)"),
 ):
     """
     Full risk analysis pipeline.
 
     `seed` makes the mock data (and therefore every figure) reproducible.
     `currency` (TND or USD) overrides the configured display currency.
+    `source` chooses the data: `mock` (simulated) or `sensors` (real Falco/Suricata alerts).
     The response carries an `analysis_id`: pass it to `/report.pdf` to download
     the report of exactly this analysis.
     """
@@ -395,17 +399,28 @@ async def analyze_with_risk_engine(
             detail=f"currency doit valoir l'une de : {', '.join(SUPPORTED_CODES)}",
         )
 
+    if source is not None and source.lower() not in SOURCE_NAMES:
+        raise HTTPException(
+            status_code=422,
+            detail=f"source doit valoir l'une de : {', '.join(SOURCE_NAMES)}",
+        )
+
     try:
         logger.info("=== RISK ANALYSIS START ===")
 
         analysis = await run_analysis(
-            normal_count=normal_count, seed=seed, currency_code=currency
+            normal_count=normal_count, seed=seed, currency_code=currency,
+            source=source, window_hours=window_hours,
         )
         analysis_store.put(analysis)
 
         logger.info("=== ANALYSIS COMPLETE ===")
 
         return public_view(analysis)
+
+    except SourceError as e:
+        # not a server bug: the chosen data source has nothing to analyse
+        raise HTTPException(status_code=e.status_code, detail=str(e))
 
     except Exception as e:
 

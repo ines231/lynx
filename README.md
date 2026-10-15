@@ -90,7 +90,7 @@ Les paramètres (port, seuils, clés d'API de threat intelligence) se règlent p
 
 | Méthode | Route | Rôle |
 | --- | --- | --- |
-| GET | `/api/risk/analyze` | analyse complète ; renvoie un `analysis_id`. Paramètres : `normal_count` (5 à 500), `seed` (résultats reproductibles), `currency` (`TND` ou `USD`, remplace la devise configurée) |
+| GET | `/api/risk/analyze` | analyse complète ; renvoie un `analysis_id`. Paramètres : `normal_count` (5 à 500), `seed` (résultats reproductibles), `currency` (`TND` ou `USD`, remplace la devise configurée), `source` (`mock` ou `sensors`), `window_hours` (fenêtre analysée, sources réelles) |
 | GET | `/api/risk/report.pdf` | rapport PDF. `analysis_id` : PDF de l'analyse affichée (410 si expirée) ; sans identifiant : nouvelle analyse |
 | GET | `/api/mitre/status` | état de la base MITRE ATT&CK : source, version, nombre de techniques, fraîcheur |
 | POST | `/api/mitre/refresh` | relance le téléchargement des données ATT&CK en arrière-plan |
@@ -186,6 +186,17 @@ L'événement le plus exposé est l'accès à un fichier sensible (`C:\Data\Fina
 | Exfiltration | file_access | T1537 Transfer Data to Cloud Account |
 
 La technique de persistence vient de la description de l'événement (« Suspicious scheduled task created ») ; la correspondance est une aide à l'investigation, à valider par un analyste.
+
+## Sources de données : simulées ou réelles
+
+| Source | Contenu | Activation |
+|---|---|---|
+| `mock` (défaut) | événements simulés par `mock_wazuh` : baseline aléatoire, scénario d'attaque écrit à la main | `GET /api/risk/analyze?source=mock` |
+| `sensors` | **alertes réelles** de [Falco](https://falco.org) (actions sur la machine) et/ou [Suricata](https://suricata.io) (réseau), lues dans leurs fichiers JSON | `GET /api/risk/analyze?source=sensors`, ou `DATA_SOURCE=sensors` dans `config/.env` |
+
+Avec `sensors`, la **baseline** est l'historique des alertes qui précède la fenêtre analysée (`SENSOR_BASELINE_DAYS`, 7 jours par défaut) et la **fenêtre** est la période récente (`SENSOR_WINDOW_HOURS`, 24 h par défaut, ou `window_hours`). Le même filtre de gravité (`SENSOR_MIN_SEVERITY`) s'applique des deux côtés. Les fichiers lus sont `FALCO_EVENTS_FILE` (`/var/log/falco/events.json`) et `SURICATA_EVE_FILE` (`/var/log/suricata/eve.json`).
+
+Les identifiants ATT&CK portés par les alertes réelles (étiquettes `T1059` de Falco, métadonnées de Suricata) sont utilisés tels quels par le corrélateur MITRE. La réponse de `/analyze` contient `data_source` (réelle ou simulée, fichiers, période, nombre d'événements). Si le capteur n'a rien à analyser, l'API répond par une erreur explicite (503 fichier introuvable, 404 aucune alerte) au lieu d'inventer des données.
 
 ## Dashboard interactif
 

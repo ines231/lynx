@@ -47,6 +47,20 @@ class Settings(BaseSettings):
     mitre_cache_ttl_days: float = 7
     mitre_auto_update: bool = True     # False = never use the network
 
+    # Data source of the risk analysis:
+    #   "mock"    simulated events (default, works anywhere)
+    #   "sensors" real alerts written by Falco (host) and/or Suricata (network)
+    data_source: str = "mock"
+    falco_events_file: str = "/var/log/falco/events.json"        # falco: json_output + file_output
+    suricata_eve_file: str = "/var/log/suricata/eve.json"
+    sensor_baseline_days: float = 7        # history used as the baseline
+    sensor_window_hours: float = 24        # recent window that is analysed
+    sensor_min_severity: str = "low"       # low | medium | high | critical (both sides)
+    sensor_max_events: int = 200           # analysed events (the newest ones)
+    sensor_baseline_max_events: int = 5000
+    sensor_read_max_mb: int = 64           # only the tail of each log file is read
+    sensor_default_ip: str = "127.0.0.1"   # host events carry no IP: use the sensor host
+
     # Feature extraction
     baseline_days: int = 90
     anomaly_threshold: float = 3.0
