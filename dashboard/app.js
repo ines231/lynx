@@ -87,10 +87,24 @@ function renderBaselineChart(chi) {
     `${top.observed} observé(s) pour ${Number(top.expected).toLocaleString("fr-FR", { maximumFractionDigits: 1 })} attendu(s).`;
 }
 
+// what this event's TYPE contributes to the chi-square statistic of the whole window
+function chiCategory(row, chi) {
+  return (chi?.categories || []).find((c) => c.category === row.event);
+}
+
+function chiShare(row, chi) {
+  const c = chiCategory(row, chi);
+  return c ? `${(c.share * 100).toFixed(0)} %${c.new ? " ★" : ""}` : "—";
+}
+
 function chiTitle(row, chi) {
-  const score = typeof row.chi_square_probability === "number"
-    ? ` · score 1 − p = ${pct(row.chi_square_probability)}` : "";
-  return `p-value du scénario complet (${METHOD_LABELS[chi?.method] || "méthode inconnue"})${score}`;
+  const c = chiCategory(row, chi);
+  const own = c
+    ? `« ${c.category} » : ${c.observed} observé(s) pour ${Number(c.expected).toLocaleString("fr-FR", { maximumFractionDigits: 1 })} attendu(s)` +
+      `, contribution ${Number(c.contribution).toLocaleString("fr-FR", { maximumFractionDigits: 1 })}` +
+      (c.new ? " · type absent de la baseline (★)" : "")
+    : "Type d'événement absent du test";
+  return `${own}. p-value du scénario complet : ${fmtP(chi?.p_value)} (${METHOD_LABELS[chi?.method] || "méthode inconnue"}).`;
 }
 
 function renderChi(chi) {
@@ -181,7 +195,7 @@ function applyFeed() {
     <td><strong>${esc(x.event)}</strong></td>
     <td>${esc(x.user || "—")}</td>
     <td>${pct(x.anomaly_probability)}</td>
-    <td title="${esc(chiTitle(x, feed.chi))}">${fmtP(feed.chi?.p_value)}</td>
+    <td title="${esc(chiTitle(x, feed.chi))}">${esc(chiShare(x, feed.chi))}</td>
     <td>${money(x.annual_loss_expectancy)}</td>
     <td><span class="priority ${priorityClass(x.priority)}">${esc(x.priority || "—")}</span></td>
     <td>${esc(x.strategy || "—")}</td>
@@ -503,11 +517,11 @@ function exportCsv() {
   if (!rows.length) return;
   const code = $("ctlCurrency").value;
   const header = ["evenement", "etape_kill_chain", "utilisateur", "probabilite_anomalie",
-    "p_value_chi2", `ALE_${code}`, `VaR95_${code}`, `VaR99_${code}`, "priorite", "traitement"];
+    "contribution_chi2", "p_value_chi2_scenario", `ALE_${code}`, `VaR95_${code}`, `VaR99_${code}`, "priorite", "traitement"];
   // French spreadsheets expect a decimal comma
   const dec = (v, n = 4) => typeof v === "number" ? v.toFixed(n).replace(".", ",") : "";
   const lines = rows.map((r) => [
-    r.event, r.stage, r.user, dec(r.anomaly_probability), dec(feed.chi?.p_value, 5),
+    r.event, r.stage, r.user, dec(r.anomaly_probability), dec(chiCategory(r, feed.chi)?.share), dec(feed.chi?.p_value, 5),
     Math.round(r.annual_loss_expectancy), Math.round(r.value_at_risk_95),
     Math.round(r.value_at_risk_99), r.priority, r.strategy
   ].map(csvCell).join(";"));

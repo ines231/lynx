@@ -41,6 +41,11 @@ class Settings(BaseSettings):
     ollama_host: str = "http://localhost:11434"
     ollama_model: str = "mistral"
     
+    # Threat event frequency: "prior" = fixed 0.01/year base (reproducible demo),
+    # "observed" = rate measured in the analysed window, "auto" = observed for real sensors only
+    tef_mode: str = "auto"
+    tef_observation_days: float = 365.0  # days of activity the analysed window is taken to represent (365 = counted as one year)
+
     # Display currency of the risk figures (FAIR engine prices in USD)
     display_currency: str = "TND"      # "TND" or "USD"
     usd_to_tnd_rate: float = 2.9927    # dinars for 1 USD (12/10/2026, to be updated)

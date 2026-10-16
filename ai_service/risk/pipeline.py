@@ -18,7 +18,9 @@ from ai_service.risk.anomaly_probability import anomaly_probability
 from ai_service.risk.chi_square_tests import chi_square_tests
 from ai_service.risk.monte_carlo_fair import monte_carlo_fair
 from ai_service.risk.risk_treatment import risk_treatment
+from ai_service.risk.common import fair_category
 from ai_service.risk.currency import get_display_currency
+from config.settings import settings
 from ai_service.mitre.knowledge_base import mitre_kb
 
 from ai_service.connectors.sources import NORMAL_EVENT_TYPES, get_source  # noqa: F401
@@ -156,9 +158,33 @@ async def run_analysis(
     event_details = []
     loss_histogram = None  # of the event with the highest ALE
 
+    # Anomaly probabilities first: in "observed" mode the frequency of each category
+    # (sum of the probabilities of its events) is needed before any event is priced.
+    anomaly_probs = [
+        anomaly_probability.calculate_probability(event, baseline)[0]
+        for event in enriched_attack
+    ]
+    tef_mode = str(settings.tef_mode or "auto").lower()
+    use_observed = tef_mode == "observed" or (
+        tef_mode == "auto" and bool(event_source.describe().get("is_real"))
+    )
+    observation_days = max(
+        float(settings.tef_observation_days), float(window_hours or 0) / 24
+    )
+    category_load: Dict[str, float] = {}
+    for event, prob in zip(enriched_attack, anomaly_probs):
+        category = fair_category(event)
+        category_load[category] = category_load.get(category, 0.0) + prob
+
     for index, event in enumerate(enriched_attack):
-        anomaly_prob, _ = anomaly_probability.calculate_probability(event, baseline)
-        risk_metrics = monte_carlo_fair.calculate_risk(event, anomaly_prob)
+        anomaly_prob = anomaly_probs[index]
+        observed_rate = (
+            category_load[fair_category(event)] * 365.0 / observation_days
+            if use_observed else None
+        )
+        risk_metrics = monte_carlo_fair.calculate_risk(
+            event, anomaly_prob, observed_rate
+        )
         if loss_histogram is None or risk_metrics.get(
             "annual_loss_expectancy", 0
         ) > loss_histogram["_ale_usd"]:
@@ -243,6 +269,10 @@ async def run_analysis(
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "parameters": {"normal_count": normal_count, "seed": seed},
         "data_source": event_source.describe(),
+        "risk_model": {
+            "tef_mode": "observed" if use_observed else "prior",
+            "observation_days": observation_days if use_observed else None,
+        },
         "currency": currency.to_dict(),
         "mitre": {
             "source": mitre_kb.source_label(),
@@ -277,6 +307,7 @@ def public_view(analysis: Dict[str, Any]) -> Dict[str, Any]:
         "generated_at": analysis["generated_at"],
         "parameters": analysis["parameters"],
         "data_source": analysis.get("data_source"),
+        "risk_model": analysis.get("risk_model"),
         "currency": analysis["currency"],
         "mitre": analysis["mitre"],
         "summary": {

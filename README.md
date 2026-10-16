@@ -200,6 +200,16 @@ Les identifiants ATT&CK portés par les alertes réelles (étiquettes `T1059` de
 
 Dans le dashboard, le sélecteur **Source des données** (simulées / réelles) et la **fenêtre analysée** pilotent `source` et `window_hours`. Un bandeau indique en permanence l'origine des chiffres (étiquette « données réelles » ou « données simulées », période, nombres d'événements) et le PDF reprend cette mention sur sa page de garde et dans la méthodologie. Les panneaux « anomalies ML », MITRE et Investigation s'appuient encore sur le scénario de démonstration ; le bandeau le précise en mode réel.
 
+### Fréquence des menaces (TEF)
+
+Deux modes, réglés par `TEF_MODE` dans `config/.env` :
+
+- `prior` : 0,01 événement par an, multiplié par la catégorie de menace et par la probabilité d'anomalie. Hypothèse de démonstration, reproductible. C'est ce qu'utilise la source simulée.
+- `observed` : fréquence mesurée dans la fenêtre analysée. Pour chaque catégorie FAIR, on additionne les probabilités d'anomalie de ses événements, puis on ramène à l'année en supposant que la fenêtre représente `TEF_OBSERVATION_DAYS` jours d'activité (365 par défaut : les événements observés sont comptés comme ceux d'une année). Le résultat n'est jamais inférieur à l'estimation a priori.
+- `auto` (défaut) : `observed` pour les capteurs réels, `prior` pour les données simulées.
+
+Une durée d'observation plus courte (30 jours par exemple) multiplie la fréquence par 12 et fait passer presque tous les événements en priorité HIGH ou CRITICAL : c'est un paramètre de calibration, à justifier dans le rapport.
+
 ### Réputation d'IP réelle (AbuseIPDB)
 
 Par défaut, la réputation des IP est **simulée** (`mock_intelowl`). Avec une clé gratuite [AbuseIPDB](https://www.abuseipdb.com/register) (1 000 requêtes par jour), les IP publiques sont interrogées pour de vrai :

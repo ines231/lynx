@@ -46,7 +46,8 @@ class MonteCarloFAIR:
     def calculate_risk(
         self,
         event: Any,
-        anomaly_prob: float
+        anomaly_prob: float,
+        observed_events_per_year: Optional[float] = None
     ) -> Dict[str, Any]:
         """
         Calculate FAIR risk from an event.
@@ -62,7 +63,8 @@ class MonteCarloFAIR:
 
         tef = self._estimate_threat_event_frequency(
             event,
-            anomaly_prob
+            anomaly_prob,
+            observed_events_per_year
         )
 
         # ---------------------------------------------------------
@@ -197,12 +199,21 @@ class MonteCarloFAIR:
     def _estimate_threat_event_frequency(
         self,
         event: Any,
-        anomaly_prob: float
+        anomaly_prob: float,
+        observed_events_per_year: Optional[float] = None
     ) -> float:
         """
         Estimate threat event frequency.
 
         TEF = estimated number of threat events per year.
+
+        Prior mode (observed_events_per_year is None): a fixed base of 0.01 event
+        per year, scaled by the category and by the anomaly probability.
+
+        Observed mode: the caller passes the yearly rate of anomalous events of this
+        category measured in the analysed window (sum of anomaly probabilities,
+        annualised). The category multiplier keeps the severity order; the result
+        is never below the prior estimate.
         """
 
         base_tef = 0.01
@@ -222,15 +233,23 @@ class MonteCarloFAIR:
             "credential_access": 3.0,
         }
 
+        category_multiplier = 1.0
         for key, multiplier in event_multipliers.items():
             if key in event_type:
-                base_tef *= multiplier
+                category_multiplier = multiplier
                 break
+        base_tef *= category_multiplier
 
         # Anomaly increases estimated threat frequency
         tef = base_tef * (
             1 + anomaly_prob * 9
         )
+
+        if observed_events_per_year is not None:
+            tef = max(
+                tef,
+                float(observed_events_per_year) * category_multiplier
+            )
 
         return min(
             tef,

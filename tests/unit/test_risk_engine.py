@@ -142,3 +142,16 @@ def test_event_types_from_the_sensors_are_priced_like_their_fair_category():
     for event_type in ("data_transfer", "credential_use"):
         priced = engine.calculate_risk({"event_type": event_type, "threat_intel": {}}, 0.6)
         assert priced["annual_loss_expectancy"] > other["annual_loss_expectancy"]
+
+
+def test_observed_frequency_raises_tef_but_never_below_the_prior():
+    from ai_service.risk.monte_carlo_fair import MonteCarloFAIR
+
+    engine = MonteCarloFAIR()
+    event = {"event_type": "data_transfer", "threat_intel": {}}
+    prior = engine.calculate_risk(event, 0.6)
+    observed = engine.calculate_risk(event, 0.6, observed_events_per_year=2.0)
+    tiny = engine.calculate_risk(event, 0.6, observed_events_per_year=0.0001)
+
+    assert observed["annual_loss_expectancy"] > prior["annual_loss_expectancy"]
+    assert tiny["annual_loss_expectancy"] == prior["annual_loss_expectancy"]

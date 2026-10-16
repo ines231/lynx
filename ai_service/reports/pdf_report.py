@@ -490,6 +490,19 @@ def _logo(height: float = 3.1 * cm) -> Optional[Image]:
         return None
 
 
+def _tef_text(model: Dict[str, Any]) -> str:
+    if model.get("tef_mode") == "observed":
+        return ("<b>Fréquence des menaces (TEF).</b> Mesurée sur la fenêtre analysée : somme des "
+                "probabilités d'anomalie des événements de la catégorie, ramenée à l'année en "
+                f"supposant que la fenêtre représente {_p(_num(model.get('observation_days'), 0))} "
+                "jours d'activité (365 = les événements observés sont comptés comme ceux d'une "
+                "année), puis pondérée par la catégorie de menace. Elle n'est jamais inférieure "
+                "à l'estimation a priori. Cette durée est une hypothèse réglable.")
+    return ("<b>Fréquence des menaces (TEF).</b> Estimation a priori : 0,01 événement par an, "
+            "multipliée par la catégorie de menace et par la probabilité d'anomalie. "
+            "Hypothèse de démonstration, non mesurée.")
+
+
 def _source_line(source: Dict[str, Any]) -> str:
     """One line saying whether the figures come from real sensors or from simulation."""
     line = str(source.get("label") or "")
@@ -681,6 +694,7 @@ def _section_method(analysis, st) -> List[Any]:
     alpha = getattr(chi_square_tests, "p_value_threshold", 0.05)
     return [
         Paragraph("2. Méthodologie", st["h1"]),
+        Paragraph(_tef_text(analysis.get("risk_model") or {}), st["body"]),
         Paragraph(
             "<b>Origine des données.</b> " + _p(_source_line(analysis.get("data_source") or {}))
             + ". " + ("Les alertes proviennent de capteurs de sécurité réels."
