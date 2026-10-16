@@ -190,3 +190,10 @@ html,body{max-width:100%;overflow-x:hidden}
 td,th{white-space:normal}
 th{white-space:normal}
 .table-wrap table{table-layout:auto}
+
+.source-banner{margin:0 0 18px;padding:11px 16px;border-radius:10px;border:1px solid #23344d;background:#0f1724;font-size:12px;color:#b7c2d1;line-height:1.6}
+.source-banner b{color:#e1e8f4}.source-banner.real{border-color:#1f6f4a;background:#0c1f18}.source-banner.sim{border-color:#7a5a1a;background:#221a0b}
+.source-banner .tag{display:inline-block;margin-right:8px;padding:2px 8px;border-radius:999px;font-size:10px;font-weight:800;letter-spacing:.04em;background:#23344d;color:#e1e8f4}
+.source-banner.real .tag{background:#1f6f4a}.source-banner.sim .tag{background:#7a5a1a}
+.source-banner .caveat{display:block;margin-top:4px;color:#8391a7}
+.rep-ok{color:#3ddc97}.rep-bad{color:#ff6b6b}

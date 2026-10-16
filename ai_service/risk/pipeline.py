@@ -60,6 +60,27 @@ async def _enrich_all(events) -> list:
     return enriched_events
 
 
+def _reputation_view(event) -> Dict[str, Any]:
+    """Compact IP reputation of one event (score, country, provider) for the UI and the PDF."""
+    out: Dict[str, Any] = {}
+    intel = event.get("threat_intel") or {}
+    for key in ("source_ip", "destination_ip"):
+        item = intel.get(key)
+        if not item:
+            continue
+        details = item.get("details") or {}
+        out[key] = {
+            "ip": item.get("indicator"),
+            "score": float(item.get("reputation_score", 0)),
+            "malicious": bool(item.get("is_malicious")),
+            "source": item.get("source"),
+            "country": details.get("country"),
+            "isp": details.get("isp"),
+            "reports": details.get("reports"),
+        }
+    return out
+
+
 def _loss_histogram_view(event, index, risk_metrics, currency) -> Dict[str, Any]:
     """Loss distribution of one event, amounts converted to the display currency."""
     hist = risk_metrics.get("loss_histogram") or {}
@@ -175,6 +196,7 @@ async def run_analysis(
             {
                 "timestamp": str(event.get("timestamp")),
                 "hostname": event.get("hostname"),
+                "reputation": _reputation_view(event),
                 "source_ip": event.get("source_ip"),
                 "destination_ip": event.get("destination_ip"),
                 "threat_event_frequency": float(

@@ -56,6 +56,19 @@
       <label>Devise
         <select id="ctlCurrency"><option value="TND">DT (dinar)</option><option value="USD">$ (dollar)</option></select>
       </label>
+      <label>Source des données
+        <select id="ctlSource" title="Données simulées (démo reproductible) ou alertes réelles des capteurs Falco / Suricata">
+          <option value="">Par défaut du serveur</option>
+          <option value="mock">Simulées (démo)</option>
+          <option value="sensors">Réelles (Falco / Suricata)</option>
+        </select>
+      </label>
+      <label id="ctlWindowLabel">Fenêtre analysée
+        <select id="ctlWindow" title="Période récente analysée ; la baseline est l'historique qui la précède">
+          <option value="0.5">30 min</option><option value="1">1 h</option><option value="6">6 h</option>
+          <option value="24" selected>24 h</option><option value="72">3 jours</option>
+        </select>
+      </label>
       <label>Actualisation auto
         <select id="ctlAuto"><option value="0">Désactivée</option><option value="30">30 s</option><option value="60">60 s</option></select>
       </label>
@@ -66,6 +79,7 @@
       </div>
     </section>
 
+    <div id="sourceBanner" class="source-banner hidden" role="status"></div>
 
     <div class="tab" id="tab-overview" data-tab="overview" role="tabpanel">
     <section id="overview" class="kpis">

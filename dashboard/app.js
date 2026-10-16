@@ -188,6 +188,19 @@ function applyFeed() {
   </tr>`).join("");
 }
 
+function reputationFacts(rep) {
+  const rows = [["Source", rep?.source_ip], ["Destination", rep?.destination_ip]].filter(([, v]) => v);
+  if (!rows.length) return "<div><span>—</span><strong>Aucune IP à évaluer</strong></div>";
+  const origin = { abuseipdb: "AbuseIPDB (réel)", local_network: "réseau local", mock_intelowl: "simulée",
+                   abuseipdb_unavailable: "indisponible" };
+  return rows.map(([label, v]) => {
+    const verdict = v.malicious ? '<span class="rep-bad">malveillante</span>' : '<span class="rep-ok">pas de signalement</span>';
+    const place = [v.country, v.isp].filter(Boolean).join(" · ");
+    return `<div><span>${esc(label)} ${esc(v.ip || "")}</span><strong>${verdict} · score ${esc(Math.round(v.score))}/100
+      <br><small>${esc(origin[v.source] || v.source || "")}${place ? " · " + esc(place) : ""}</small></strong></div>`;
+  }).join("");
+}
+
 function openDrawer(i) {
   const r = feed.rows[i], d = feed.details[i] || {};
   if (!r) return;
@@ -209,6 +222,8 @@ function openDrawer(i) {
       ${kv("Utilisateur", esc(r.user || "—"))}
       ${kv("IP source → destination", `${esc(d.source_ip || "—")} → ${esc(d.destination_ip || "—")}`)}
     </div>
+    <h4>Réputation des IP</h4>
+    <div class="facts">${reputationFacts(d.reputation)}</div>
     <h4>Risque (FAIR)</h4>
     <div class="facts">
       ${kv("Probabilité d'anomalie", pct(r.anomaly_probability))}
@@ -433,9 +448,35 @@ function analysisQuery() {
     normal_count: $("ctlCount").value,
     currency: $("ctlCurrency").value
   });
+  const source = $("ctlSource").value;
+  if (source) q.set("source", source);
+  if (source === "sensors") q.set("window_hours", $("ctlWindow").value);
   const seed = $("ctlSeed").value.trim();
-  if (seed !== "") q.set("seed", seed);
+  if (seed !== "" && source !== "sensors") q.set("seed", seed);   // real data has no seed
   return q.toString();
+}
+
+function renderSourceBanner(src) {
+  const box = $("sourceBanner");
+  if (!src) { box.classList.add("hidden"); return; }
+  const fmt = (v) => v ? String(v).replace("T", " ").slice(0, 16) : "—";
+  box.className = "source-banner " + (src.is_real ? "real" : "sim");
+  box.innerHTML = src.is_real
+    ? `<span class="tag">DONNÉES RÉELLES</span><b>${esc(src.label)}</b> · ${esc(src.analysed_events)} événement(s) analysé(s)
+       du ${esc(fmt(src.window_start))} au ${esc(fmt(src.window_end))} · baseline : ${esc(src.baseline_events)} événement(s)
+       (${esc(fmt(src.baseline_start))} → ${esc(fmt(src.baseline_end))})
+       <span class="caveat">Les panneaux « anomalies ML », MITRE et Investigation s'appuient encore sur le scénario de démonstration ;
+       les chiffres de risque, le χ² et le flux d'événements viennent des capteurs.</span>`
+    : `<span class="tag">DONNÉES SIMULÉES</span><b>${esc(src.label)}</b> · scénario de démonstration reproductible
+       (graine, baseline générée). Ne décrit pas un système réel.`;
+}
+
+function syncSourceControls() {
+  const real = $("ctlSource").value === "sensors";
+  $("ctlWindowLabel").classList.toggle("hidden", !real);
+  $("ctlSeed").disabled = real;
+  $("ctlCount").disabled = real;
+  try { localStorage.setItem("lynx.source", $("ctlSource").value); } catch (e) { /* optional */ }
 }
 
 let autoTimer = null;
@@ -488,6 +529,10 @@ function applyTheme(theme) {
 
 function initControls() {
   $("ctlCount").addEventListener("input", () => { $("ctlCountOut").textContent = $("ctlCount").value; });
+  try { $("ctlSource").value = localStorage.getItem("lynx.source") || ""; } catch (e) { /* optional */ }
+  syncSourceControls();
+  $("ctlSource").addEventListener("change", () => { syncSourceControls(); load(); });
+  $("ctlWindow").addEventListener("change", load);
   $("ctlRun").addEventListener("click", load);
   $("ctlCurrency").addEventListener("change", load);
   $("ctlAuto").addEventListener("change", setAutoRefresh);
@@ -540,6 +585,7 @@ async function load() {
 
     currencySymbol = risk.currency?.symbol || "DT";
     currentAnalysisId = risk.analysis_id || null;
+    renderSourceBanner(risk.data_source);
     setPdfState("⤓ Rapport PDF", !currentAnalysisId);
 
     const rows = risk.event_risks || [];

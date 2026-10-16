@@ -202,3 +202,25 @@ def test_currency_can_be_chosen_per_analysis(monkeypatch):
     monkeypatch.setattr("config.settings.settings.display_currency", "TND", raising=False)
     usd = asyncio.run(run_analysis(normal_count=30, seed=7, currency_code="USD"))
     assert usd["currency"]["code"] == "USD" and usd["currency"]["rate_from_usd"] == 1.0
+
+
+def test_pdf_states_where_the_data_comes_from():
+    from ai_service.reports.pdf_report import _source_line
+
+    assert "simulées" in _source_line({"label": "Données simulées", "is_real": False})
+    real = _source_line({"label": "Données réelles (Falco, Suricata)", "is_real": True,
+                         "analysed_events": 7, "window_hours": 0.5, "baseline_events": 11})
+    assert "7 événement(s)" in real and "0.5 h" in real and "baseline de 11" in real
+
+    analysis = _analysis()
+    assert analysis["data_source"]["is_real"] is False
+    assert build_risk_report(analysis).startswith(b"%PDF")
+
+
+def test_event_details_carry_the_ip_reputation():
+    details = public_view(_analysis())["event_details"]
+
+    assert details and all("reputation" in d for d in details)
+    first = next(d["reputation"] for d in details if d["reputation"])
+    entry = next(iter(first.values()))
+    assert {"ip", "score", "malicious", "source"} <= set(entry)

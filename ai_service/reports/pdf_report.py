@@ -490,6 +490,18 @@ def _logo(height: float = 3.1 * cm) -> Optional[Image]:
         return None
 
 
+def _source_line(source: Dict[str, Any]) -> str:
+    """One line saying whether the figures come from real sensors or from simulation."""
+    line = str(source.get("label") or "")
+    if source.get("is_real"):
+        line += (f" · {source.get('analysed_events', '?')} événement(s) analysé(s) sur "
+                 f"{source.get('window_hours', '?')} h · baseline de "
+                 f"{source.get('baseline_events', '?')} événement(s)")
+    else:
+        line += " (événements générés, non issus d'un système réel)"
+    return line
+
+
 def _cover(analysis: Dict[str, Any], st: Dict[str, ParagraphStyle]) -> Table:
     params = analysis.get("parameters") or {}
     seed = params.get("seed")
@@ -501,6 +513,9 @@ def _cover(analysis: Dict[str, Any], st: Dict[str, ParagraphStyle]) -> Table:
         f"Baseline : {_p(params.get('normal_count', '-'))} événements normaux &nbsp;|&nbsp; "
         f"Graine : {_p(seed if seed is not None else 'aléatoire')}"
     )
+    source = analysis.get("data_source") or {}
+    if source.get("label"):
+        meta += f"<br/>Source des données : <b>{_p(_source_line(source))}</b>"
 
     logo = _logo()
     logo_w = (logo.drawWidth + 0.6 * cm) if logo else 0
@@ -666,6 +681,12 @@ def _section_method(analysis, st) -> List[Any]:
     alpha = getattr(chi_square_tests, "p_value_threshold", 0.05)
     return [
         Paragraph("2. Méthodologie", st["h1"]),
+        Paragraph(
+            "<b>Origine des données.</b> " + _p(_source_line(analysis.get("data_source") or {}))
+            + ". " + ("Les alertes proviennent de capteurs de sécurité réels."
+                      if (analysis.get("data_source") or {}).get("is_real")
+                      else "Les chiffres illustrent la méthode et ne décrivent pas un système réel."),
+            st["body"]),
         Paragraph(
             "<b>Baseline.</b> Un profil de comportement normal est construit à partir "
             "d'événements de référence (heures d'activité, processus, ports, types "
