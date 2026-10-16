@@ -198,6 +198,21 @@ Avec `sensors`, la **baseline** est l'historique des alertes qui précède la fe
 
 Les identifiants ATT&CK portés par les alertes réelles (étiquettes `T1059` de Falco, métadonnées de Suricata) sont utilisés tels quels par le corrélateur MITRE. La réponse de `/analyze` contient `data_source` (réelle ou simulée, fichiers, période, nombre d'événements). Si le capteur n'a rien à analyser, l'API répond par une erreur explicite (503 fichier introuvable, 404 aucune alerte) au lieu d'inventer des données.
 
+### Réputation d'IP réelle (AbuseIPDB)
+
+Par défaut, la réputation des IP est **simulée** (`mock_intelowl`). Avec une clé gratuite [AbuseIPDB](https://www.abuseipdb.com/register) (1 000 requêtes par jour), les IP publiques sont interrogées pour de vrai :
+
+```bash
+# config/.env
+ABUSEIPDB_API_KEY=<ta clé>
+ABUSEIPDB_MIN_SCORE=50      # score de confiance (0-100) à partir duquel une IP est « malveillante »
+```
+
+- Les adresses privées ou locales (`192.168.x.x`, `127.0.0.1`…) ne sont jamais envoyées : elles sont marquées `local_network`.
+- Chaque IP est mise en cache (`TI_CACHE_HOURS`, 24 h) et les requêtes simultanées pour une même IP n'en font qu'une, ce qui économise le quota.
+- En cas d'échec (réseau, clé invalide, quota dépassé), le résultat est **neutre** (`abuseipdb_unavailable`, score 0), jamais aléatoire : une panne ne doit pas inventer d'IP malveillantes. Après une erreur 401/403/429, le fournisseur se met en pause 5 minutes.
+- Seules les IP sont réelles : domaines, empreintes et URL restent simulés. Le champ `source` de chaque résultat indique l'origine (`abuseipdb`, `local_network`, `abuseipdb_unavailable` ou `mock_intelowl`).
+
 ## Dashboard interactif
 
 Le dashboard (`/dashboard-ui`) est organisé en **onglets** choisis dans le menu (Vue générale, Analyse du risque, MITRE ATT&CK, Flux d'événements, Investigation) ; l'onglet actif est mémorisé. Il ne se contente pas d'afficher des chiffres :

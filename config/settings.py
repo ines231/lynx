@@ -32,6 +32,10 @@ class Settings(BaseSettings):
     # TI APIs
     abuseipdb_api_key: str = ""
     virustotal_api_key: str = ""
+    abuseipdb_min_score: int = 50        # confidence score (0-100) from which an IP is "malicious"
+    abuseipdb_max_age_days: int = 90     # only reports newer than this count
+    ti_timeout_seconds: float = 5.0
+    ti_cache_hours: float = 24.0         # one lookup per IP per day (free quota: 1 000/day)
     
     # Ollama
     ollama_host: str = "http://localhost:11434"

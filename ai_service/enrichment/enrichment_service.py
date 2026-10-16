@@ -1,5 +1,5 @@
 from ai_service.connectors.models.event import SecurityEvent, EnrichedEvent, ThreatIntelResult
-from ai_service.connectors.intelowl.mock_intelowl import mock_intelowl
+from ai_service.connectors.intelowl.abuseipdb import build_connector
 from typing import Dict, Any
 import logging
 
@@ -9,7 +9,7 @@ class EnrichmentService:
     """Service to enrich security events with threat intelligence"""
     
     def __init__(self, intelowl_connector=None):
-        self.intelowl = intelowl_connector or mock_intelowl
+        self.intelowl = intelowl_connector or build_connector()
     
     async def enrich_event(self, event: SecurityEvent) -> EnrichedEvent:
         """
