@@ -19,6 +19,7 @@ from ai_service.risk.chi_square_tests import chi_square_tests
 from ai_service.risk.monte_carlo_fair import monte_carlo_fair
 from ai_service.risk.risk_treatment import risk_treatment
 from ai_service.risk.common import fair_category
+from ai_service.risk.hunting_priority import assess as assess_hunting
 from ai_service.risk.currency import get_display_currency
 from config.settings import settings
 from ai_service.mitre.knowledge_base import mitre_kb
@@ -195,10 +196,17 @@ async def run_analysis(
 
         controls = treatment.get("recommended_controls", [])
 
+        stage = kill_chain_correlator.classify_stage(event)
+        hunt = assess_hunting(event, anomaly_prob, stage)
+
         event_risks.append(
             {
                 "event": event.get("event_type"),
-                "stage": kill_chain_correlator.classify_stage(event),
+                "stage": stage,
+                "hunt_score": hunt["score"],
+                "hunt_level": hunt["level"],
+                "hunt_label": hunt["label"],
+                "hunt_reasons": hunt["reasons"],
                 "user": event.get("user"),
                 "anomaly_probability": float(anomaly_prob),
                 "chi_square_probability": float(chi2_prob),
@@ -315,6 +323,10 @@ def public_view(analysis: Dict[str, Any]) -> Dict[str, Any]:
             "attacks_found": len(analysis["attacks"]),
             "reports_generated": len(analysis["reports"]),
             "hypotheses_generated": len(analysis["hypotheses"]),
+            "hunting": {
+                level: sum(1 for r in analysis["event_risks"] if r.get("hunt_level") == level)
+                for level in ("INVESTIGATE", "MONITOR", "NOISE")
+            },
         },
         "baseline": analysis["baseline"],
         "event_risks": analysis["event_risks"],

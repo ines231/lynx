@@ -46,6 +46,10 @@ class Settings(BaseSettings):
     tef_mode: str = "auto"
     tef_observation_days: float = 365.0  # days of activity the analysed window is taken to represent (365 = counted as one year)
 
+    # Hunting priority levels (score 0-100, see ai_service/risk/hunting_priority.py)
+    hunt_investigate_from: float = 55.0
+    hunt_monitor_from: float = 35.0
+
     # Display currency of the risk figures (FAIR engine prices in USD)
     display_currency: str = "TND"      # "TND" or "USD"
     usd_to_tnd_rate: float = 2.9927    # dinars for 1 USD (12/10/2026, to be updated)

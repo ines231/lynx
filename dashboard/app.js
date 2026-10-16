@@ -141,7 +141,10 @@ function renderChi(chi) {
 
 // ---- event feed: search, filters, sorting, detail drawer ---------------------
 const PRIORITY_RANK = { CRITICAL: 5, HIGH: 4, MEDIUM: 3, LOW: 2, INFO: 1 };
-const feed = { rows: [], details: [], chi: null, sortKey: "annual_loss_expectancy", sortDir: -1 };
+const HUNT_RANK = { INVESTIGATE: 3, MONITOR: 2, NOISE: 1 };
+const HUNT_LABEL = { INVESTIGATE: "À investiguer maintenant", MONITOR: "À surveiller", NOISE: "Bruit probable" };
+const huntClass = (l) => l === "INVESTIGATE" ? "high" : l === "MONITOR" ? "medium" : "low";
+const feed = { rows: [], details: [], chi: null, sortKey: "hunt_score", sortDir: -1 };
 
 function renderRows(rows, chi, details = []) {
   feed.rows = rows.map((r, i) => ({
@@ -159,8 +162,9 @@ function renderRows(rows, chi, details = []) {
     if (values.includes(current)) el.value = current;
   };
   fill("feedPriority", "Toutes priorités",
-    [...new Set(feed.rows.map((r) => String(r.priority || "—")))]
-      .sort((a, b) => (PRIORITY_RANK[b] || 0) - (PRIORITY_RANK[a] || 0)));
+    [...new Set(feed.rows.map((r) => String(r.hunt_level || "NOISE")))]
+      .sort((a, b) => (HUNT_RANK[b] || 0) - (HUNT_RANK[a] || 0)),
+    (v) => HUNT_LABEL[v] || v);
   fill("feedStage", "Toutes étapes",
     STAGE_ORDER.filter((s) => feed.rows.some((r) => r.stage === s)), stageLabel);
   applyFeed();
@@ -172,9 +176,9 @@ function applyFeed() {
   const key = feed.sortKey, dir = feed.sortDir;
 
   const rows = feed.rows
-    .filter((r) => !prio || String(r.priority || "—") === prio)
+    .filter((r) => !prio || String(r.hunt_level || "NOISE") === prio)
     .filter((r) => !stage || r.stage === stage)
-    .filter((r) => !q || [r.event, r.user, r.strategy, r.priority, stageLabel(r.stage)]
+    .filter((r) => !q || [r.event, r.user, r.hunt_label, ...(r.hunt_reasons || []), stageLabel(r.stage)]
       .some((v) => String(v || "").toLowerCase().includes(q)))
     .sort((a, b) => dir * ((a[key] || 0) - (b[key] || 0)) || a._i - b._i);
 
@@ -197,8 +201,8 @@ function applyFeed() {
     <td>${pct(x.anomaly_probability)}</td>
     <td title="${esc(chiTitle(x, feed.chi))}">${esc(chiShare(x, feed.chi))}</td>
     <td>${money(x.annual_loss_expectancy)}</td>
-    <td><span class="priority ${priorityClass(x.priority)}">${esc(x.priority || "—")}</span></td>
-    <td>${esc(x.strategy || "—")}</td>
+    <td><span class="priority ${huntClass(x.hunt_level)}" title="Score ${esc(x.hunt_score)} / 100">${esc(x.hunt_label || "—")}</span> <small class="muted">${esc(Math.round(x.hunt_score ?? 0))}</small></td>
+    <td class="muted">${esc((x.hunt_reasons || [])[0] || "—")}</td>
   </tr>`).join("");
 }
 
@@ -226,9 +230,11 @@ function openDrawer(i) {
   $("drawerSub").textContent = ` ${stageLabel(r.stage) || ""}`;
   $("drawerBody").innerHTML = `
     <div class="drawer-badges">
-      <span class="priority ${priorityClass(r.priority)}">${esc(r.priority || "—")}</span>
-      <span class="status-chip">${esc(r.strategy || "—")}</span>
+      <span class="priority ${huntClass(r.hunt_level)}">${esc(r.hunt_label || "—")}</span>
+      <span class="status-chip">Score de chasse ${esc(Math.round(r.hunt_score ?? 0))} / 100</span>
     </div>
+    <h4>Pourquoi cette priorité</h4>
+    <ul class="drawer-list">${(r.hunt_reasons || []).map((t) => `<li>${esc(t)}</li>`).join("")}</ul>
     <h4>Contexte</h4>
     <div class="facts">
       ${kv("Horodatage", esc(formatTimestamp(d.timestamp)))}
@@ -238,7 +244,7 @@ function openDrawer(i) {
     </div>
     <h4>Réputation des IP</h4>
     <div class="facts">${reputationFacts(d.reputation)}</div>
-    <h4>Risque (FAIR)</h4>
+    <h4>Exposition financière estimée (FAIR) · priorité financière ${esc(r.priority || "—")}</h4>
     <div class="facts">
       ${kv("Probabilité d'anomalie", pct(r.anomaly_probability))}
       ${kv("Fréquence d'événement (TEF)", num(d.threat_event_frequency) + " / an")}
@@ -265,7 +271,7 @@ function initFeed() {
     $(id).addEventListener(id === "feedSearch" ? "input" : "change", applyFeed));
   $("feedReset").addEventListener("click", () => {
     $("feedSearch").value = ""; $("feedPriority").value = ""; $("feedStage").value = "";
-    feed.sortKey = "annual_loss_expectancy"; feed.sortDir = -1;
+    feed.sortKey = "hunt_score"; feed.sortDir = -1;
     applyFeed();
   });
   document.querySelectorAll("th.sortable").forEach((th) => th.addEventListener("click", () => {
@@ -517,11 +523,11 @@ function exportCsv() {
   if (!rows.length) return;
   const code = $("ctlCurrency").value;
   const header = ["evenement", "etape_kill_chain", "utilisateur", "probabilite_anomalie",
-    "contribution_chi2", "p_value_chi2_scenario", `ALE_${code}`, `VaR95_${code}`, `VaR99_${code}`, "priorite", "traitement"];
+    "priorite_chasse", "score_chasse", "contribution_chi2", "p_value_chi2_scenario", `ALE_${code}`, `VaR95_${code}`, `VaR99_${code}`, "priorite", "traitement"];
   // French spreadsheets expect a decimal comma
   const dec = (v, n = 4) => typeof v === "number" ? v.toFixed(n).replace(".", ",") : "";
   const lines = rows.map((r) => [
-    r.event, r.stage, r.user, dec(r.anomaly_probability), dec(chiCategory(r, feed.chi)?.share), dec(feed.chi?.p_value, 5),
+    r.event, r.stage, r.user, dec(r.anomaly_probability), r.hunt_label, dec(r.hunt_score, 1), dec(chiCategory(r, feed.chi)?.share), dec(feed.chi?.p_value, 5),
     Math.round(r.annual_loss_expectancy), Math.round(r.value_at_risk_95),
     Math.round(r.value_at_risk_99), r.priority, r.strategy
   ].map(csvCell).join(";"));

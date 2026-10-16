@@ -200,6 +200,10 @@ Les identifiants ATT&CK portés par les alertes réelles (étiquettes `T1059` de
 
 Dans le dashboard, le sélecteur **Source des données** (simulées / réelles) et la **fenêtre analysée** pilotent `source` et `window_hours`. Un bandeau indique en permanence l'origine des chiffres (étiquette « données réelles » ou « données simulées », période, nombres d'événements) et le PDF reprend cette mention sur sa page de garde et dans la méthodologie. Les panneaux « anomalies ML », MITRE et Investigation s'appuient encore sur le scénario de démonstration ; le bandeau le précise en mode réel.
 
+### Priorité de chasse
+
+La question d'un chasseur n'est pas « combien cela coûtera par an » mais « qu'est-ce que je regarde en premier, et pourquoi ». Chaque événement reçoit donc un **score de chasse de 0 à 100**, somme transparente de cinq signaux : anomalie par rapport à la baseline (35), gravité de la catégorie de menace (30), gravité signalée par le capteur (15), réputation des IP (15) et avancement dans la chaîne d'attaque (5). Trois niveaux : **À investiguer maintenant** (≥ 55), **À surveiller** (≥ 35), **Bruit probable**. Chaque événement affiche les raisons qui ont fait monter son score. Poids et seuils (`HUNT_INVESTIGATE_FROM`, `HUNT_MONITOR_FROM`) sont des hypothèses d'expert, réglables, non apprises. La priorité financière FAIR reste disponible dans le détail de l'événement.
+
 ### Fréquence des menaces (TEF)
 
 Deux modes, réglés par `TEF_MODE` dans `config/.env` :
