@@ -11,6 +11,7 @@ Only ``"event_type": "alert"`` documents are used::
                "metadata": {"mitre_technique_id": ["T1595"]}}}
 """
 
+import socket
 from typing import Any, Dict, Optional
 
 from ai_service.connectors.models.event import SecurityEvent
@@ -63,7 +64,7 @@ def suricata_to_event(doc: Dict[str, Any]) -> Optional[SecurityEvent]:
             source_port=port(doc.get("src_port")),
             destination_port=port(doc.get("dest_port")),
             event_type=event_type,
-            hostname=doc.get("host") or doc.get("in_iface"),
+            hostname=doc.get("host") or socket.gethostname(),   # eve.json has no host: use this machine
             rule_id=alert.get("signature_id") if isinstance(alert.get("signature_id"), int) else None,
             rule_description=signature,
             severity=SEVERITY.get(alert.get("severity"), "low"),
