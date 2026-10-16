@@ -127,3 +127,18 @@ def test_event_type_distribution_is_not_truncated_to_ten():
     events = [{"event_type": f"type_{i}"} for i in range(15)]
     baseline = BaselineModel().build_user_baseline("u", events)
     assert len(baseline["event_types"]) == 15
+
+
+def test_event_types_from_the_sensors_are_priced_like_their_fair_category():
+    from ai_service.risk.common import fair_category
+    from ai_service.risk.monte_carlo_fair import MonteCarloFAIR
+
+    assert fair_category({"event_type": "data_transfer"}) == "exfiltration"
+    assert fair_category({"event_type": "credential_use"}) == "credential_access"
+    assert fair_category({"event_type": "code_injection"}) == "exploitation"
+
+    engine = MonteCarloFAIR()
+    other = engine.calculate_risk({"event_type": "security_alert", "threat_intel": {}}, 0.6)
+    for event_type in ("data_transfer", "credential_use"):
+        priced = engine.calculate_risk({"event_type": event_type, "threat_intel": {}}, 0.6)
+        assert priced["annual_loss_expectancy"] > other["annual_loss_expectancy"]

@@ -26,6 +26,11 @@ FAIR_CATEGORY_ALIASES = {
     "service_installation": "persistence",
     "registry_modification": "persistence",
     "scheduled_task": "persistence",
+    # types produced by the Falco / Suricata adapters
+    "data_transfer": "exfiltration",
+    "archive_creation": "exfiltration",      # data staged before leaving
+    "code_injection": "exploitation",
+    "credential_use": "credential_access",
 }
 
 

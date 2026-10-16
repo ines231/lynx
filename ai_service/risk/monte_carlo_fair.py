@@ -219,6 +219,7 @@ class MonteCarloFAIR:
             "persistence": 2.0,
             "exploitation": 2.5,
             "reconnaissance": 1.5,
+            "credential_access": 3.0,
         }
 
         for key, multiplier in event_multipliers.items():
@@ -323,6 +324,7 @@ class MonteCarloFAIR:
             "persistence": 20000,
             "exploitation": 15000,
             "reconnaissance": 5000,
+            "credential_access": 25000,
         }
 
         for key, loss_value in multipliers.items():

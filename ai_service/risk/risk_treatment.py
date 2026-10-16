@@ -44,6 +44,12 @@ class RiskTreatment:
             "Investigate unexpected scheduled tasks",
             "Remove unauthorized persistence mechanisms"
         ],
+        "credential_access": [
+            "Reset the credentials that may be exposed",
+            "Enforce MFA on the affected accounts",
+            "Restrict read access to credential stores (/etc/shadow, keyrings)",
+            "Monitor credential dumping tools and unusual sudo usage"
+        ],
         "exploitation": [
             "Apply security patches immediately",
             "Disable vulnerable services",
