@@ -71,8 +71,8 @@ function renderLossChart(h) {
   if (h && h.total_years) {
     const share = ((h.loss_years / h.total_years) * 100).toFixed(1).replace(".", ",");
     $("lossChartNote").textContent =
-      `${h.total_years.toLocaleString("fr-FR")} années simulées, dont ${share} % avec au moins une perte. ` +
-      `Les VaR portent sur les années avec perte ; au-delà de la dernière colonne, les pertes sont regroupées.`;
+      `${h.total_years.toLocaleString("fr-FR")} simulations (horizon de 12 mois), dont ${share} % avec au moins une perte. ` +
+      `Les VaR portent sur les simulations avec perte ; au-delà de la dernière colonne, les pertes sont regroupées.`;
   }
 }
 
@@ -500,8 +500,8 @@ function renderSourceBanner(src) {
     ? `<span class="tag">DONNÉES RÉELLES</span><b>${esc(src.label)}</b> · ${esc(src.analysed_events)} événement(s) analysé(s)
        du ${esc(fmt(src.window_start))} au ${esc(fmt(src.window_end))} · baseline : ${esc(src.baseline_events)} événement(s)
        (${esc(fmt(src.baseline_start))} → ${esc(fmt(src.baseline_end))})
-       <span class="caveat">Les panneaux « anomalies ML », MITRE et Investigation s'appuient encore sur le scénario de démonstration ;
-       les chiffres de risque, le χ² et le flux d'événements viennent des capteurs.</span>`
+       <span class="caveat">Le modèle ML (Isolation Forest) est entraîné sur la baseline, qui contient des alertes réelles et pas
+       uniquement du comportement sain : ses résultats sont à lire avec prudence.</span>`
     : `<span class="tag">DONNÉES SIMULÉES</span><b>${esc(src.label)}</b> · scénario de démonstration reproductible
        (graine, baseline générée). Ne décrit pas un système réel.`;
 }
@@ -611,12 +611,11 @@ async function load() {
   $("lastUpdate").textContent = "Mise à jour " + new Date().toLocaleTimeString();
 
   try {
-    const [risk, anomaly, investigation, scenario] = await Promise.all([
-      get("/api/risk/analyze?" + analysisQuery()),
-      get("/api/anomalies/demo"),
-      get("/api/investigations/full-demo"),
-      get("/api/events/attack-scenario")
-    ]);
+    // One request: ML anomalies, MITRE and investigation come from the SAME events as the
+    // risk figures (simulated or real depending on the selected source).
+    const risk = await get("/api/risk/analyze?" + analysisQuery());
+    const ml = risk.ml || {};
+    const investigation = risk.investigation || {};
 
     currencySymbol = risk.currency?.symbol || "DT";
     currentAnalysisId = risk.analysis_id || null;
@@ -632,8 +631,8 @@ async function load() {
     const hunting = risk.summary?.hunting || {};
 
     const report = investigation.sample_report;
-    const techniques = report?.mitre_attack_mapping || [];
-    const stages = report?.kill_chain?.stages_detected || [];
+    const techniques = investigation.observed_techniques || [];
+    const stages = STAGE_ORDER.filter((s) => rows.some((r) => r.stage === s));
     const timeline = report?.timeline || [];
     const duration = report?.attack_summary?.time_span_minutes;
 
@@ -641,9 +640,10 @@ async function load() {
     $("serviceBadge").className = "status-chip success";
 
     $("kpiEvents").textContent = risk.summary?.total_events ?? rows.length;
-    $("kpiAnomalies").textContent = anomaly.steps?.detection?.anomalies_detected ?? anomaly.detection?.anomalies_detected ?? "—";
-    const detectionRate = anomaly.steps?.detection?.detection_rate || anomaly.detection?.detection_rate;
-    $("anomalyRate").textContent = detectionRate ? `${detectionRate} classés anomalies` : "Détection ML";
+    $("kpiAnomalies").textContent = ml.available ? ml.anomalies_detected : "—";
+    $("anomalyRate").textContent = ml.available
+      ? `${(ml.detection_rate * 100).toFixed(1)} % classés anomalies · modèle entraîné sur ${ml.trained_on} événements de la baseline`
+      : "Modèle ML indisponible";
     $("kpiAttacks").textContent = risk.summary?.attacks_found ?? 0;
     $("kpiReports").textContent = (risk.summary?.reports_generated ?? 0) + " rapport(s) généré(s)";
     $("kpiHunt").textContent = hunting.INVESTIGATE ?? 0;
@@ -670,10 +670,10 @@ async function load() {
     $("chainSummary").textContent = stages.length + "/5 étapes observées";
     $("timelineNote").textContent = duration != null
       ? `Fenêtre observée : ${Number(duration).toFixed(0)} minute(s) · ${timeline.length} événement(s) dans le rapport.`
-      : `${scenario.length || 0} événement(s) dans le scénario.`;
+      : `${risk.summary?.total_events ?? 0} événement(s) analysé(s) · ${investigation.attacks ? "attaque corrélée" : "aucune attaque multi-étapes corrélée"}.`;
 
-    $("reports").textContent = investigation.results?.reporting?.investigation_reports ?? 0;
-    $("hypotheses").textContent = investigation.results?.reporting?.hypotheses_generated ?? 0;
+    $("reports").textContent = investigation.reports ?? 0;
+    $("hypotheses").textContent = investigation.hypotheses ?? 0;
     $("techniques").textContent = techniques.length;
 
     $("recommendation").innerHTML = top

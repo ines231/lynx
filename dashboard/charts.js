@@ -25,7 +25,7 @@ function compactNumber(v) {
   return v.toLocaleString("fr-FR", { maximumFractionDigits: 0 });
 }
 
-// Histogram of simulated annual losses with ALE / VaR 95 / VaR 99 markers.
+// Histogram of simulated losses (12-month horizon) with ALE / VaR 95 / VaR 99 markers.
 // h = { edges[n+1], counts[n], annual_loss_expectancy, value_at_risk_95, value_at_risk_99, ... }
 function lossHistogramSvg(h, symbol) {
   if (!h || !h.counts || !h.counts.length) {
@@ -49,7 +49,7 @@ function lossHistogramSvg(h, symbol) {
     const from = h.edges[i], to = h.edges[i + 1];
     const last = i === h.counts.length - 1;
     const label = `${compactNumber(from)}${last ? "+" : " – " + compactNumber(to)} ${symbol} : ` +
-      `${c} année(s) simulée(s) (${((c / total) * 100).toFixed(1)} %)`;
+      `${c} simulation(s) (${((c / total) * 100).toFixed(1)} %)`;
     return `<rect class="hbar" x="${(x0 + 1).toFixed(1)}" y="${y(c).toFixed(1)}" width="${Math.max(bw - 2, 1).toFixed(1)}"
       height="${(m.t + ih - y(c)).toFixed(1)}" rx="2"><title>${esc(label)}</title></rect>`;
   }).join("");
@@ -82,12 +82,12 @@ function lossHistogramSvg(h, symbol) {
   }).join("");
 
   return `<svg class="chart" viewBox="0 0 ${W} ${H}" role="img"
-      aria-label="Distribution des pertes annuelles simulées (Monte-Carlo)">
+      aria-label="Distribution des pertes simulées (Monte-Carlo)">
     ${grid}${bars}${lines}
     <line class="haxisline" x1="${m.l}" x2="${W - m.r}" y1="${m.t + ih}" y2="${m.t + ih}"/>
     ${xTicks}
-    <text class="haxis title" x="${(m.l + iw / 2).toFixed(1)}" y="${H - 6}" text-anchor="middle">Perte annuelle simulée (${esc(symbol)})</text>
-    <text class="haxis title" transform="translate(12 ${(m.t + ih / 2).toFixed(1)}) rotate(-90)" text-anchor="middle">Années simulées</text>
+    <text class="haxis title" x="${(m.l + iw / 2).toFixed(1)}" y="${H - 6}" text-anchor="middle">Perte simulée sur 12 mois (${esc(symbol)})</text>
+    <text class="haxis title" transform="translate(12 ${(m.t + ih / 2).toFixed(1)}) rotate(-90)" text-anchor="middle">Nombre de simulations</text>
   </svg>`;
 }
 

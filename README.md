@@ -198,7 +198,7 @@ Avec `sensors`, la **baseline** est l'historique des alertes qui précède la fe
 
 Les identifiants ATT&CK portés par les alertes réelles (étiquettes `T1059` de Falco, métadonnées de Suricata) sont utilisés tels quels par le corrélateur MITRE. La réponse de `/analyze` contient `data_source` (réelle ou simulée, fichiers, période, nombre d'événements). Si le capteur n'a rien à analyser, l'API répond par une erreur explicite (503 fichier introuvable, 404 aucune alerte) au lieu d'inventer des données.
 
-Dans le dashboard, le sélecteur **Source des données** (simulées / réelles) et la **fenêtre analysée** pilotent `source` et `window_hours`. Un bandeau indique en permanence l'origine des chiffres (étiquette « données réelles » ou « données simulées », période, nombres d'événements) et le PDF reprend cette mention sur sa page de garde et dans la méthodologie. Les panneaux « anomalies ML », MITRE et Investigation s'appuient encore sur le scénario de démonstration ; le bandeau le précise en mode réel.
+Dans le dashboard, le sélecteur **Source des données** (simulées / réelles) et la **fenêtre analysée** pilotent `source` et `window_hours`. Un bandeau indique en permanence l'origine des chiffres (étiquette « données réelles » ou « données simulées », période, nombres d'événements) et le PDF reprend cette mention sur sa page de garde et dans la méthodologie. Les panneaux « anomalies ML », MITRE et Investigation sont calculés à partir des **mêmes événements** que le reste (simulés ou réels selon la source) : une seule requête `/analyze` alimente tout le dashboard. Les techniques ATT&CK affichées sont celles de tous les événements analysés, pas seulement des attaques multi-étapes corrélées.
 
 ### Priorité de chasse
 

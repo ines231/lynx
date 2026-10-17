@@ -74,3 +74,16 @@ def test_next_steps_are_empty_without_known_activity():
 
     assert next_steps([{"event_type": "network_connection"}], [{"hunt_score": 80.0}]) == []
     assert next_steps([], []) == []
+
+
+def test_ml_mitre_and_investigation_come_from_the_same_analysis():
+    import asyncio
+    from ai_service.risk.pipeline import public_view, run_analysis
+
+    view = public_view(asyncio.run(run_analysis(normal_count=30, seed=7)))
+
+    assert {"available", "trained_on", "total", "anomalies_detected"} <= set(view["ml"])
+    investigation = view["investigation"]
+    assert {"attacks", "reports", "hypotheses", "sample_report", "observed_techniques"} <= set(investigation)
+    assert investigation["observed_techniques"]
+    assert {"technique_id", "name", "tactics"} <= set(investigation["observed_techniques"][0])

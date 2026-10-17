@@ -7,6 +7,7 @@ can feed the dashboard (``GET /api/risk/analyze``) and the downloadable report
 """
 
 import logging
+import os
 import random
 import uuid
 from collections import OrderedDict
@@ -24,6 +25,8 @@ from ai_service.risk.next_steps import next_steps as build_next_steps
 from ai_service.risk.currency import get_display_currency
 from config.settings import settings
 from ai_service.mitre.knowledge_base import mitre_kb
+from ai_service.mitre.correlator import mitre_correlator
+from ai_service.ml.anomaly.anomaly_service import anomaly_service
 
 from ai_service.connectors.sources import NORMAL_EVENT_TYPES, get_source  # noqa: F401
 from ai_service.enrichment.enrichment_service import enrichment_service
@@ -62,6 +65,26 @@ async def _enrich_all(events) -> list:
         enriched = await enrichment_service.enrich_event(event)
         enriched_events.append(enriched_event_to_dict(enriched))
     return enriched_events
+
+
+def _ml_anomalies(enriched_normal, enriched_attack) -> Dict[str, Any]:
+    """Isolation Forest trained on the baseline events, applied to the analysed window."""
+    try:
+        os.makedirs("data/models", exist_ok=True)      # where the detector stores its model
+        anomaly_service.train_detector(enriched_normal)
+        results = anomaly_service.detect_batch_anomalies(enriched_attack)
+        detected = sum(1 for r in results if r.get("is_anomaly"))
+        return {
+            "available": True,
+            "trained_on": len(enriched_normal),
+            "total": len(results),
+            "anomalies_detected": detected,
+            "detection_rate": (detected / len(results)) if results else 0.0,
+        }
+    except Exception as exc:                       # the ML KPI is optional
+        logger.warning("ML anomaly detection unavailable: %s", exc)
+        return {"available": False, "trained_on": len(enriched_normal), "total": 0,
+                "anomalies_detected": 0, "detection_rate": 0.0}
 
 
 def _reputation_view(event) -> Dict[str, Any]:
@@ -273,6 +296,16 @@ async def run_analysis(
             hypothesis_generator.generate_hypotheses_from_attack(attack)
         )
 
+    # Everything below is computed from the SAME events as the figures above (simulated or
+    # real, depending on the source): ML anomaly detection and MITRE techniques.
+    ml = _ml_anomalies(enriched_normal, enriched_attack)
+    observed_techniques = mitre_correlator.map_attack({
+        "events": [
+            {**event, "kill_chain_stage": risk.get("stage", "unknown")}
+            for event, risk in zip(enriched_attack, event_risks)
+        ]
+    })
+
     return {
         "analysis_id": uuid.uuid4().hex[:12],
         "generated_at": datetime.now(timezone.utc).isoformat(),
@@ -306,6 +339,8 @@ async def run_analysis(
         "attacks": attacks,
         "reports": reports,
         "hypotheses": hypotheses,
+        "ml": ml,
+        "observed_techniques": observed_techniques,
     }
 
 
@@ -319,6 +354,14 @@ def public_view(analysis: Dict[str, Any]) -> Dict[str, Any]:
         "data_source": analysis.get("data_source"),
         "risk_model": analysis.get("risk_model"),
         "next_steps": analysis.get("next_steps", []),
+        "ml": analysis.get("ml"),
+        "investigation": {
+            "attacks": len(analysis["attacks"]),
+            "reports": len(analysis["reports"]),
+            "hypotheses": len(analysis["hypotheses"]),
+            "sample_report": analysis["reports"][0] if analysis["reports"] else None,
+            "observed_techniques": analysis.get("observed_techniques", []),
+        },
         "currency": analysis["currency"],
         "mitre": analysis["mitre"],
         "summary": {
