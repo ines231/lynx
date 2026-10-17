@@ -92,6 +92,14 @@ def test_log_reader_skips_damaged_lines_and_reads_only_the_tail(tmp_path):
     assert list(read_json_lines(str(path))) == [{"a": 1}, {"b": 2}]
 
 
+def test_log_reader_accepts_lines_preceded_by_nul_bytes(tmp_path):
+    # a file truncated while the sensor keeps writing starts its next line with NUL bytes
+    path = tmp_path / "eve.json"
+    path.write_bytes(b'{"a": 1}\n' + b"\x00" * 40 + b'{"b": 2}\n\x00\x00garbage\n{"c": 3}\n')
+
+    assert list(read_json_lines(str(path))) == [{"a": 1}, {"b": 2}, {"c": 3}]
+
+
 # ------------------------------------------------------------ source + pipeline
 @pytest.fixture
 def sensor_files(tmp_path, monkeypatch):

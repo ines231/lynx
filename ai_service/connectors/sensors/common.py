@@ -86,7 +86,9 @@ def read_json_lines(path: str, max_mb: int = 64) -> Iterator[Dict[str, Any]]:
             handle.seek(size - max_mb * 1024 * 1024)
             handle.readline()                      # drop the partial first line
         for raw in handle:
-            raw = raw.strip()
+            # NUL bytes appear in front of a line when the file was truncated while the
+            # sensor kept writing (log rotation): the JSON itself is intact.
+            raw = raw.strip(b"\x00 \t\r\n")
             if not raw.startswith(b"{"):
                 continue
             try:
