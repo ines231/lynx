@@ -251,7 +251,7 @@ function openDrawer(i) {
       ${kv("Vulnérabilité", pct(d.vulnerability))}
       ${kv("Fréquence de perte (LEF)", num(d.loss_event_frequency, 3) + " / an")}
       ${kv("Perte probable par événement", money(d.probable_loss_magnitude))}
-      ${kv("ALE (perte annuelle attendue)", money(r.annual_loss_expectancy))}
+      ${kv("Exposition estimée (ALE)", money(r.annual_loss_expectancy))}
       ${kv("VaR 95 % / 99 %", `${money(r.value_at_risk_95)} / ${money(r.value_at_risk_99)}`)}
       ${kv("Déficit attendu (ES 95 %)", money(d.expected_shortfall_95))}
     </div>
@@ -337,20 +337,20 @@ function renderStageDetail(rows) {
   }
   box.innerHTML = `<strong>${esc(stageLabel(selectedStage))}</strong> · ${items.length} événement(s)` +
     `<ul>${items.map((r) => `<li><b>${esc(r.event)}</b> — ${esc(r.user || "—")} · ` +
-      `<span class="priority ${priorityClass(r.priority)}">${esc(r.priority || "—")}</span> · ` +
-      `ALE ${money(r.annual_loss_expectancy)}</li>`).join("")}</ul>`;
+      `<span class="priority ${huntClass(r.hunt_level)}">${esc(r.hunt_label || "—")}</span> · ` +
+      `score ${Math.round(r.hunt_score ?? 0)}</li>`).join("")}</ul>`;
 }
 
 function renderPriorityDonut(rows) {
   const counts = {};
   rows.forEach((r) => {
-    const key = String(r.priority || "INFO").toUpperCase();
+    const key = String(r.hunt_level || "NOISE");
     counts[key] = (counts[key] || 0) + 1;
   });
-  const order = ["CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO"];
-  const keys = [...order.filter((k) => counts[k]), ...Object.keys(counts).filter((k) => !order.includes(k))];
+  const colors = { INVESTIGATE: "#ff7a7a", MONITOR: "#ffd779", NOISE: "#7fe0ae" };
+  const keys = ["INVESTIGATE", "MONITOR", "NOISE"].filter((k) => counts[k]);
   $("priorityDonut").innerHTML = donutSvg(
-    keys.map((k) => ({ label: k, value: counts[k], color: PRIORITY_COLORS[k] || "#8593a8" })),
+    keys.map((k) => ({ label: HUNT_LABEL[k], value: counts[k], color: colors[k] })),
     "événements"
   );
 }
@@ -627,7 +627,9 @@ async function load() {
     const rows = risk.event_risks || [];
     const highest = [...rows].sort((a,b) =>
       (b.annual_loss_expectancy || 0) - (a.annual_loss_expectancy || 0)
-    )[0];
+    )[0];                                       // most exposed (financial view)
+    const top = [...rows].sort((a, b) => (b.hunt_score || 0) - (a.hunt_score || 0))[0];   // hunting view
+    const hunting = risk.summary?.hunting || {};
 
     const report = investigation.sample_report;
     const techniques = report?.mitre_attack_mapping || [];
@@ -644,17 +646,19 @@ async function load() {
     $("anomalyRate").textContent = detectionRate ? `${detectionRate} classés anomalies` : "Détection ML";
     $("kpiAttacks").textContent = risk.summary?.attacks_found ?? 0;
     $("kpiReports").textContent = (risk.summary?.reports_generated ?? 0) + " rapport(s) généré(s)";
-    $("kpiALE").textContent = money(highest?.annual_loss_expectancy);
-    $("kpiALEnote").textContent = risk.currency && risk.currency.code !== "USD"
-      ? `Annual Loss Expectancy · 1 USD = ${Number(risk.currency.rate_from_usd).toFixed(4)} ${risk.currency.symbol}`
-      : "Annual Loss Expectancy";
+    $("kpiHunt").textContent = hunting.INVESTIGATE ?? 0;
+    $("kpiHuntNote").textContent = `${hunting.MONITOR ?? 0} à surveiller · ${hunting.NOISE ?? 0} bruit probable`;
 
-    $("riskPriority").textContent = highest?.priority || "—";
-    $("riskProbability").textContent = pct(highest?.anomaly_probability);
+    $("riskPriority").textContent = top?.hunt_label || "—";
+    $("riskProbability").textContent = pct(top?.anomaly_probability);
     renderChi(risk.chi_square);
-    $("riskStrategy").textContent = highest?.strategy || "—";
+    $("riskHuntScore").textContent = top ? `${Math.round(top.hunt_score)} / 100` : "—";
+    $("finALE").textContent = money(highest?.annual_loss_expectancy);
     $("riskVar95").textContent = money(highest?.value_at_risk_95);
     $("riskVar99").textContent = money(highest?.value_at_risk_99);
+    $("finNote").textContent = (risk.currency && risk.currency.code !== "USD"
+      ? `1 USD = ${Number(risk.currency.rate_from_usd).toFixed(4)} ${risk.currency.symbol}. ` : "") +
+      "Événement le plus exposé : " + (highest?.event || "—") + ".";
 
     renderLossChart(risk.loss_histogram);
     renderBaselineChart(risk.chi_square);
@@ -672,14 +676,15 @@ async function load() {
     $("hypotheses").textContent = investigation.results?.reporting?.hypotheses_generated ?? 0;
     $("techniques").textContent = techniques.length;
 
-    $("recommendation").innerHTML = highest
-      ? `<strong>${esc(highest.priority || "Priorité")} — ${esc(highest.strategy || "Traitement à définir")}</strong>
-         <br>Événement prioritaire : <strong>${esc(highest.event)}</strong>.
-         Probabilité d’anomalie : ${pct(highest.anomaly_probability)}.
-         Exposition annuelle estimée : ${money(highest.annual_loss_expectancy)}.`
+    $("recommendation").innerHTML = top
+      ? `<strong>${esc(top.hunt_label || "Priorité")}</strong> · score ${Math.round(top.hunt_score)} / 100
+         <br>Événement prioritaire : <strong>${esc(top.event)}</strong>.
+         Probabilité d’anomalie : ${pct(top.anomaly_probability)}.
+         <br>${(top.hunt_reasons || []).map((t) => esc(t)).join(" · ")}
+         <br><small class="muted">Exposition financière estimée : ${money(top.annual_loss_expectancy)} (indicatif).</small>`
       : "Aucune recommandation disponible.";
 
-    renderControls(highest?.recommended_controls);
+    renderControls(top?.recommended_controls);
     renderIocs(report);
     renderTechniques(techniques);
     renderMatrix(techniques);

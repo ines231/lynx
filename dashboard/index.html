@@ -16,7 +16,7 @@
     </div>
     <nav role="tablist" aria-label="Sections du dashboard">
       <a class="active" href="#tab=overview" data-tab-link="overview" role="tab">Vue générale</a>
-      <a href="#tab=risk" data-tab-link="risk" role="tab">Analyse du risque</a>
+      <a href="#tab=risk" data-tab-link="risk" role="tab">Baseline et exposition</a>
       <a href="#tab=mitre" data-tab-link="mitre" role="tab">MITRE ATT&amp;CK</a>
       <a href="#tab=feed" data-tab-link="feed" role="tab">Flux d'événements</a>
       <a href="#tab=investigation" data-tab-link="investigation" role="tab">Investigation</a>
@@ -29,7 +29,7 @@
       <div>
         <div class="eyebrow">SECURITY OPERATIONS CENTER</div>
         <h1>Probabilistic Threat Hunting</h1>
-        <p>Détection comportementale, quantification FAIR du risque et aide à la décision.</p>
+        <p>Détection comportementale, priorisation de la chasse aux menaces et estimation d'exposition.</p>
       </div>
       <div class="top-actions">
         <span id="serviceBadge" class="status-chip">Connexion…</span>
@@ -40,7 +40,7 @@
 
     <nav class="tabstrip" aria-label="Sections du dashboard (mobile)">
       <a href="#tab=overview" data-tab-link="overview">Vue générale</a>
-      <a href="#tab=risk" data-tab-link="risk">Risque</a>
+      <a href="#tab=risk" data-tab-link="risk">Exposition</a>
       <a href="#tab=mitre" data-tab-link="mitre">MITRE</a>
       <a href="#tab=feed" data-tab-link="feed">Événements</a>
       <a href="#tab=investigation" data-tab-link="investigation">Investigation</a>
@@ -86,20 +86,20 @@
       <article class="card kpi"><span>Événements d'attaque</span><strong id="kpiEvents">—</strong><small>Scénario analysé</small></article>
       <article class="card kpi"><span>Anomalies ML détectées</span><strong id="kpiAnomalies">—</strong><small id="anomalyRate">—</small><em class="kpi-note">Détection binaire du modèle</em></article>
       <article class="card kpi"><span>Attaques corrélées</span><strong id="kpiAttacks">—</strong><small id="kpiReports">—</small></article>
-      <article class="card kpi risk-kpi"><span>Exposition annuelle max.</span><strong id="kpiALE">—</strong><small id="kpiALEnote">Annual Loss Expectancy</small></article>
+      <article class="card kpi risk-kpi"><span>À investiguer maintenant</span><strong id="kpiHunt">—</strong><small id="kpiHuntNote">—</small></article>
     </section>
 
     <section class="grid two">
       <article class="card" id="risk">
         <div class="section-head">
-          <div><h2>Risk intelligence</h2><p>Le risque est évalué événement par événement.</p></div>
+          <div><h2>Priorité de chasse</h2><p>Chaque événement est noté : anomalie, gravité, réputation des IP, chaîne d'attaque.</p></div>
           <span class="badge" id="riskPriority">—</span>
         </div>
-        <div class="risk-explainer">Le modèle ML décide si un événement est une anomalie. Le moteur de risque conserve une <strong>probabilité continue</strong> pour prioriser les événements.</div>
+        <div class="risk-explainer">Le score de chasse (0-100) additionne cinq signaux et indique <strong>quoi regarder en premier</strong>. Les raisons de chaque score sont dans l'onglet Événements. L'exposition financière est à part, dans l'onglet Exposition.</div>
         <div class="risk-highlight">
           <div><span>Probabilité d'anomalie</span><strong id="riskProbability">—</strong></div>
           <div><span>p-value du test χ²</span><strong id="riskChiSquare">—</strong></div>
-          <div><span>Stratégie</span><strong id="riskStrategy">—</strong></div>
+          <div><span>Score de chasse</span><strong id="riskHuntScore">—</strong></div>
         </div>
         <div class="chi-panel" id="chiPanel">
           <div class="chi-head">
@@ -114,11 +114,7 @@
           </div>
           <p id="chiNote" class="chi-note">—</p>
         </div>
-        <div class="metric-pair">
-          <div><span>VaR 95%</span><strong id="riskVar95">—</strong></div>
-          <div><span>VaR 99%</span><strong id="riskVar99">—</strong></div>
-        </div>
-        <h3 class="mini-title">Répartition des priorités</h3>
+        <h3 class="mini-title">Répartition des priorités de chasse</h3>
         <div id="priorityDonut"></div>
         <div id="riskBars" class="bars"></div>
       </article>
@@ -138,9 +134,16 @@
     <div class="tab" id="tab-risk" data-tab="risk" role="tabpanel">
     <section class="card" id="lossChart">
       <div class="section-head">
-        <div><h2>Distribution des pertes annuelles</h2><p id="lossChartNote">Simulation Monte-Carlo FAIR de l'événement le plus exposé.</p></div>
+        <div><h2>Exposition financière estimée (hypothèse)</h2><p id="lossChartNote">Simulation Monte-Carlo FAIR de l'événement le plus exposé.</p></div>
         <span class="status-chip" id="lossChartEvent">—</span>
       </div>
+      <p class="fin-intro">Estimation <strong>indicative</strong>, destinée au rapport et à la direction : que coûterait l'événement le plus exposé s'il se reproduisait sur douze mois, d'après des hypothèses de modèle (fréquence, perte par événement) qui ne sont pas des mesures. Elle ne sert pas à décider quoi investiguer : c'est le rôle du score de chasse.</p>
+      <div class="metric-trio">
+        <div><span>Exposition estimée (ALE)</span><strong id="finALE">—</strong></div>
+        <div><span>VaR 95 %</span><strong id="riskVar95">—</strong></div>
+        <div><span>VaR 99 %</span><strong id="riskVar99">—</strong></div>
+      </div>
+      <p class="muted" id="finNote"></p>
       <div id="lossHistogram"></div>
       <div class="chart-legend">
         <span><i class="lg lg-bar"></i>Années avec perte</span>
@@ -184,7 +187,7 @@
     <div class="tab" id="tab-feed" data-tab="feed" role="tabpanel">
     <section class="card" id="feed">
       <div class="section-head">
-        <div><h2>Event risk feed</h2><p>Priorisation par probabilité, perte attendue et traitement.</p></div>
+        <div><h2>Event risk feed</h2><p>Priorisation de chasse : anomalie, gravité, réputation des IP et chaîne d'attaque.</p></div>
         <span id="lastUpdate" class="muted">—</span>
       </div>
       <div class="toolbar" id="feedToolbar">

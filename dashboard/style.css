@@ -205,3 +205,11 @@ th{white-space:normal}
 .next-item .watch{color:#e1e8f4}
 .next-item .tech{display:inline-block;margin:2px 6px 2px 0;padding:2px 8px;border-radius:999px;background:#192333;font-size:11px;color:#9fb3cf}
 .next-item .from{font-size:11px;color:#7f8ca0}
+
+.fin-intro{margin:0 0 12px;padding:10px 14px;border-radius:10px;border:1px solid #23344d;background:#0f1724;font-size:12px;color:#b7c2d1;line-height:1.6}
+.fin-intro strong{color:#e1e8f4}
+.metric-trio{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin:0 0 10px}
+.metric-trio div{border:1px solid #23344d;border-radius:10px;padding:10px 12px;background:#0f1724}
+.metric-trio span{display:block;font-size:11px;color:#7f8ca0;margin-bottom:4px}
+.metric-trio strong{font-size:18px;color:#e1e8f4}
+@media(max-width:600px){.metric-trio{grid-template-columns:1fr}}
