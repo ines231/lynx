@@ -197,3 +197,11 @@ th{white-space:normal}
 .source-banner.real .tag{background:#1f6f4a}.source-banner.sim .tag{background:#7a5a1a}
 .source-banner .caveat{display:block;margin-top:4px;color:#8391a7}
 .rep-ok{color:#3ddc97}.rep-bad{color:#ff6b6b}
+
+.next-list{display:grid;gap:12px}
+.next-item{border:1px solid #23344d;border-radius:10px;padding:12px 14px;background:#0f1724}
+.next-item h3{margin:0 0 4px;font-size:14px;color:#e1e8f4;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.next-item p{margin:4px 0;font-size:12px;color:#b7c2d1;line-height:1.55}
+.next-item .watch{color:#e1e8f4}
+.next-item .tech{display:inline-block;margin:2px 6px 2px 0;padding:2px 8px;border-radius:999px;background:#192333;font-size:11px;color:#9fb3cf}
+.next-item .from{font-size:11px;color:#7f8ca0}

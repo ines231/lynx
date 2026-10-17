@@ -20,6 +20,7 @@ from ai_service.risk.monte_carlo_fair import monte_carlo_fair
 from ai_service.risk.risk_treatment import risk_treatment
 from ai_service.risk.common import fair_category
 from ai_service.risk.hunting_priority import assess as assess_hunting
+from ai_service.risk.next_steps import next_steps as build_next_steps
 from ai_service.risk.currency import get_display_currency
 from config.settings import settings
 from ai_service.mitre.knowledge_base import mitre_kb
@@ -277,6 +278,7 @@ async def run_analysis(
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "parameters": {"normal_count": normal_count, "seed": seed},
         "data_source": event_source.describe(),
+        "next_steps": build_next_steps(enriched_attack, event_risks, mitre_kb.name),
         "risk_model": {
             "tef_mode": "observed" if use_observed else "prior",
             "observation_days": observation_days if use_observed else None,
@@ -316,6 +318,7 @@ def public_view(analysis: Dict[str, Any]) -> Dict[str, Any]:
         "parameters": analysis["parameters"],
         "data_source": analysis.get("data_source"),
         "risk_model": analysis.get("risk_model"),
+        "next_steps": analysis.get("next_steps", []),
         "currency": analysis["currency"],
         "mitre": analysis["mitre"],
         "summary": {

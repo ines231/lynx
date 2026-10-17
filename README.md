@@ -204,6 +204,10 @@ Dans le dashboard, le sélecteur **Source des données** (simulées / réelles) 
 
 La question d'un chasseur n'est pas « combien cela coûtera par an » mais « qu'est-ce que je regarde en premier, et pourquoi ». Chaque événement reçoit donc un **score de chasse de 0 à 100**, somme transparente de cinq signaux : anomalie par rapport à la baseline (35), gravité de la catégorie de menace (30), gravité signalée par le capteur (15), réputation des IP (15) et avancement dans la chaîne d'attaque (5). Trois niveaux : **À investiguer maintenant** (≥ 55), **À surveiller** (≥ 35), **Bruit probable**. Chaque événement affiche les raisons qui ont fait monter son score. Poids et seuils (`HUNT_INVESTIGATE_FROM`, `HUNT_MONITOR_FROM`) sont des hypothèses d'expert, réglables, non apprises. La priorité financière FAIR reste disponible dans le détail de l'événement.
 
+### Ce qui peut venir ensuite
+
+À partir des types d'événements observés dans la fenêtre, l'onglet MITRE liste les **étapes suivantes plausibles** de l'attaquant (reconnaissance → exploitation, vol d'identifiants → mouvement latéral, collecte → exfiltration…), avec les techniques ATT&CK à chercher (noms issus de la base MITRE officielle) et un indice concret à rechercher dans les journaux. Une étape déjà observée n'est pas reproposée ; la pertinence est le score de chasse de l'événement le plus grave qui y mène. Ce sont des **hypothèses de chasse écrites par un expert** (`ai_service/risk/next_steps.py`), pas des prédictions apprises sur des données.
+
 ### Fréquence des menaces (TEF)
 
 Deux modes, réglés par `TEF_MODE` dans `config/.env` :

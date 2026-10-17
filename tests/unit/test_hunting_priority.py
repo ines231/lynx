@@ -50,3 +50,27 @@ def test_pipeline_attaches_the_hunting_priority_to_every_event():
                for r in view["event_risks"])
     counts = view["summary"]["hunting"]
     assert sum(counts.values()) == len(view["event_risks"])
+
+
+def test_next_steps_follow_the_attack_chain_and_skip_what_was_already_seen():
+    from ai_service.risk.next_steps import next_steps
+
+    events = [{"event_type": "credential_use"}, {"event_type": "port_scan"}]
+    risks = [{"hunt_score": 60.0}, {"hunt_score": 40.0}]
+    steps = next_steps(events, risks, technique_name=lambda t: f"name of {t}")
+    by_next = {s["next"]: s for s in steps}
+
+    assert "lateral_movement" in by_next and "exploitation" in by_next
+    assert by_next["lateral_movement"]["score"] == 60.0 and steps[0]["score"] >= steps[-1]["score"]
+    assert by_next["lateral_movement"]["techniques"][0]["name"].startswith("name of T")
+    assert "reconnaissance" not in by_next                     # already observed
+
+    steps = next_steps(events + [{"event_type": "lateral_movement"}], risks + [{"hunt_score": 70.0}])
+    assert "lateral_movement" not in {s["next"] for s in steps}
+
+
+def test_next_steps_are_empty_without_known_activity():
+    from ai_service.risk.next_steps import next_steps
+
+    assert next_steps([{"event_type": "network_connection"}], [{"hunt_score": 80.0}]) == []
+    assert next_steps([], []) == []

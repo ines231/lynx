@@ -476,6 +476,21 @@ function analysisQuery() {
   return q.toString();
 }
 
+function renderNextSteps(steps) {
+  const items = steps || [];
+  $("nextChip").textContent = items.length ? `${items.length} hypothèse(s)` : "Aucune";
+  $("nextBody").innerHTML = items.length
+    ? `<div class="next-list">${items.map((n) => `<div class="next-item">
+        <h3>${esc(n.label)}
+          <span class="priority ${n.score >= 55 ? "high" : n.score >= 35 ? "medium" : "low"}" title="Score de chasse de l'événement le plus grave qui mène à cette étape">pertinence ${esc(Math.round(n.score))}</span></h3>
+        <p class="from">Après : ${esc((n.after || []).join(", "))}</p>
+        <p>${esc(n.why)}</p>
+        <p class="watch"><strong>À chercher :</strong> ${esc(n.watch)}</p>
+        <div>${(n.techniques || []).map((t) => `<span class="tech">${esc(t.id)}${t.name ? " · " + esc(t.name) : ""}</span>`).join("")}</div>
+      </div>`).join("")}</div>`
+    : '<p class="empty">Aucune étape suivante à signaler : les étapes plausibles ont déjà été observées ou aucun événement n\'est exploitable.</p>';
+}
+
 function renderSourceBanner(src) {
   const box = $("sourceBanner");
   if (!src) { box.classList.add("hidden"); return; }
@@ -606,6 +621,7 @@ async function load() {
     currencySymbol = risk.currency?.symbol || "DT";
     currentAnalysisId = risk.analysis_id || null;
     renderSourceBanner(risk.data_source);
+    renderNextSteps(risk.next_steps);
     setPdfState("⤓ Rapport PDF", !currentAnalysisId);
 
     const rows = risk.event_risks || [];
